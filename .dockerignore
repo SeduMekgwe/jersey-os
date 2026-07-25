@@ -1,0 +1,15 @@
+**/.git
+**/.vs
+**/.vscode
+**/bin
+**/obj
+**/node_modules
+**/dist
+**/coverage
+**/TestResults
+.dotnet
+.tools
+.env
+.env.*
+!.env.example
+*.log

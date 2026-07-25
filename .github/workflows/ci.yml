@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+          cache: true
+          cache-dependency-path: "**/packages.lock.json"
+      - name: Restore
+        run: dotnet restore JerseyOs.slnx --locked-mode
+      - name: Verify formatting
+        run: dotnet format JerseyOs.slnx --no-restore --verify-no-changes
+      - name: Build
+        run: dotnet build JerseyOs.slnx --no-restore --configuration Release
+      - name: Test
+        run: dotnet test JerseyOs.slnx --no-build --configuration Release --collect:"XPlat Code Coverage" --results-directory TestResults
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: TestResults
+          if-no-files-found: ignore
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: src/JerseyOs.Web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: src/JerseyOs.Web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test -- --run --coverage
+      - run: pnpm build
+      - name: Upload frontend coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: src/JerseyOs.Web/coverage
+          if-no-files-found: ignore
+
+  containers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: src/JerseyOs.Api/Dockerfile
+          push: false
+          tags: jersey-os-api:ci
+      - name: Build Worker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: src/JerseyOs.Worker/Dockerfile
+          push: false
+          tags: jersey-os-worker:ci
+      - name: Build Web image
+        uses: docker/build-push-action@v6
+        with:
+          context: src/JerseyOs.Web
+          file: src/JerseyOs.Web/Dockerfile
+          push: false
+          tags: jersey-os-web:ci

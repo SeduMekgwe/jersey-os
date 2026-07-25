@@ -1,0 +1,29 @@
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      dotnet:
+        patterns: ["*"]
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: npm
+    directory: /src/JerseyOs.Web
+    schedule:
+      interval: weekly
+    groups:
+      frontend:
+        patterns: ["*"]
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: monthly

@@ -1,0 +1,18 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/JerseyOs.Api/JerseyOs.Api.csproj" />
+    <Project Path="src/JerseyOs.Application/JerseyOs.Application.csproj" />
+    <Project Path="src/JerseyOs.Contracts/JerseyOs.Contracts.csproj" />
+    <Project Path="src/JerseyOs.Domain/JerseyOs.Domain.csproj" />
+    <Project Path="src/JerseyOs.Infrastructure/JerseyOs.Infrastructure.csproj" />
+    <Project Path="src/JerseyOs.SharedKernel/JerseyOs.SharedKernel.csproj" />
+    <Project Path="src/JerseyOs.Worker/JerseyOs.Worker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/JerseyOs.Api.IntegrationTests/JerseyOs.Api.IntegrationTests.csproj" />
+    <Project Path="tests/JerseyOs.Application.Tests/JerseyOs.Application.Tests.csproj" />
+    <Project Path="tests/JerseyOs.Architecture.Tests/JerseyOs.Architecture.Tests.csproj" />
+    <Project Path="tests/JerseyOs.Domain.Tests/JerseyOs.Domain.Tests.csproj" />
+    <Project Path="tests/JerseyOs.Infrastructure.IntegrationTests/JerseyOs.Infrastructure.IntegrationTests.csproj" />
+  </Folder>
+</Solution>

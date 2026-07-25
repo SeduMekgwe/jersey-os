@@ -1,0 +1,43 @@
+# .NET
+**/bin/
+**/obj/
+artifacts/
+TestResults/
+*.user
+*.suo
+*.nupkg
+
+# Local SDK and tools
+.dotnet/
+.tools/
+.config/dotnet-tools.json
+
+# Frontend
+**/node_modules/
+**/dist/
+**/coverage/
+**/playwright-report/
+**/test-results/
+*.tsbuildinfo
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+appsettings.*.Local.json
+secrets.json
+*.pfx
+*.pem
+*.key
+
+# IDE and OS
+.vs/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs and runtime data
+*.log
+logs/
+data/
