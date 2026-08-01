@@ -15,6 +15,11 @@ export type AdjustInventoryDto = components['schemas']['AdjustInventoryRequest']
 export type InventoryDto = components['schemas']['InventoryResponse'];
 export type TaxonomyItemDto = components['schemas']['TaxonomyItemResponse'];
 export type CreateTaxonomyItemDto = components['schemas']['CreateTaxonomyItemRequest'];
+export type SupplierDto = components['schemas']['SupplierResponse'];
+export type CreateSupplierDto = components['schemas']['CreateSupplierRequest'];
+export type ImportBatchSummaryDto = components['schemas']['ImportBatchSummaryResponse'];
+export type ImportBatchDetailDto = components['schemas']['ImportBatchDetailResponse'];
+export type ImportItemDto = components['schemas']['ImportItemResponse'];
 
 export interface SessionDto {
   accessToken: components['schemas']['AuthResponse']['accessToken'];

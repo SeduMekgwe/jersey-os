@@ -1,6 +1,6 @@
 # Jersey OS documentation
 
-## Foundation and catalog
+## Foundation, catalog, and import
 
 - [Architecture overview](architecture.md)
 - [Module boundaries](module-boundaries.md)

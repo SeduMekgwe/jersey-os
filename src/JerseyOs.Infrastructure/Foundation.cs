@@ -48,6 +48,9 @@ public static class Permissions
     public const string CatalogRead = "catalog.read";
     public const string CatalogWrite = "catalog.write";
     public const string InventoryAdjust = "inventory.adjust";
+    public const string ImportRead = "import.read";
+    public const string ImportUpload = "import.upload";
+    public const string ImportReview = "import.review";
     public static readonly string[] All =
     [
         PlatformRead,
@@ -55,7 +58,10 @@ public static class Permissions
         SystemHealthRead,
         CatalogRead,
         CatalogWrite,
-        InventoryAdjust
+        InventoryAdjust,
+        ImportRead,
+        ImportUpload,
+        ImportReview
     ];
 }
 
@@ -89,6 +95,9 @@ public sealed class JerseyOsDbContext(
     public DbSet<ProductImage> ProductImagesSet => Set<ProductImage>();
     public DbSet<ProductCategory> ProductCategoriesSet => Set<ProductCategory>();
     public DbSet<ProductTag> ProductTagsSet => Set<ProductTag>();
+    public DbSet<Supplier> SuppliersSet => Set<Supplier>();
+    public DbSet<ImportBatch> ImportBatchesSet => Set<ImportBatch>();
+    public DbSet<ImportItem> ImportItemsSet => Set<ImportItem>();
 
     IQueryable<Organization> IApplicationDbContext.Organizations => OrganizationsSet;
     IQueryable<RefreshTokenSession> IApplicationDbContext.RefreshTokenSessions => RefreshTokenSessionsSet;
@@ -101,6 +110,9 @@ public sealed class JerseyOsDbContext(
     IQueryable<Category> IApplicationDbContext.Categories => CategoriesSet;
     IQueryable<Tag> IApplicationDbContext.Tags => TagsSet;
     IQueryable<AuditLog> IApplicationDbContext.AuditLogs => AuditLogs;
+    IQueryable<Supplier> IApplicationDbContext.Suppliers => SuppliersSet;
+    IQueryable<ImportBatch> IApplicationDbContext.ImportBatches => ImportBatchesSet;
+    IQueryable<ImportItem> IApplicationDbContext.ImportItems => ImportItemsSet;
 
     void IApplicationDbContext.Add<TEntity>(TEntity entity) => Set<TEntity>().Add(entity);
     void IApplicationDbContext.Remove<TEntity>(TEntity entity) => Set<TEntity>().Remove(entity);
@@ -182,6 +194,7 @@ public sealed class JerseyOsDbContext(
             b.HasQueryFilter(x => !x.IsDeleted && x.OrganizationId == EffectiveOrganizationId);
         });
         builder.ConfigureCatalog(EffectiveOrganizationId);
+        builder.ConfigureImport(EffectiveOrganizationId);
 
         foreach (var entityType in builder.Model.GetEntityTypes()
                      .Where(t => typeof(IAuditableEntity).IsAssignableFrom(t.ClrType)))
@@ -461,6 +474,7 @@ public static class DependencyInjection
         services.AddScoped<OutboxIntegrationEventPublisher>();
         services.AddScoped<IIntegrationEventPublisher>(sp => sp.GetRequiredService<OutboxIntegrationEventPublisher>());
         services.AddObjectStorage(configuration);
+        services.AddImportServices();
         services.AddDbContext<JerseyOsDbContext>(o => o.UseSqlServer(connectionString));
         services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<JerseyOsDbContext>());
         services.AddIdentityCore<ApplicationUser>(o =>
@@ -512,7 +526,10 @@ public static class DependencyInjection
                 .AddPolicy(Permissions.SystemHealthRead, p => p.RequireClaim("permission", Permissions.SystemHealthRead))
                 .AddPolicy(Permissions.CatalogRead, p => p.RequireClaim("permission", Permissions.CatalogRead))
                 .AddPolicy(Permissions.CatalogWrite, p => p.RequireClaim("permission", Permissions.CatalogWrite))
-                .AddPolicy(Permissions.InventoryAdjust, p => p.RequireClaim("permission", Permissions.InventoryAdjust));
+                .AddPolicy(Permissions.InventoryAdjust, p => p.RequireClaim("permission", Permissions.InventoryAdjust))
+                .AddPolicy(Permissions.ImportRead, p => p.RequireClaim("permission", Permissions.ImportRead))
+                .AddPolicy(Permissions.ImportUpload, p => p.RequireClaim("permission", Permissions.ImportUpload))
+                .AddPolicy(Permissions.ImportReview, p => p.RequireClaim("permission", Permissions.ImportReview));
         }
         return services;
     }

@@ -19,6 +19,9 @@ public interface IApplicationDbContext
     IQueryable<Category> Categories { get; }
     IQueryable<Tag> Tags { get; }
     IQueryable<AuditLog> AuditLogs { get; }
+    IQueryable<Supplier> Suppliers { get; }
+    IQueryable<ImportBatch> ImportBatches { get; }
+    IQueryable<ImportItem> ImportItems { get; }
 
     void Add<TEntity>(TEntity entity) where TEntity : class;
     void Remove<TEntity>(TEntity entity) where TEntity : class;

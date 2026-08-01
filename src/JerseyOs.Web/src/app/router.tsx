@@ -2,6 +2,8 @@ import { createBrowserRouter } from 'react-router-dom';
 import { RequireAuth, RequirePermission } from '@/auth/guards';
 import { AppShell } from '@/components/app-shell';
 import { DashboardPage } from '@/pages/dashboard';
+import { ImportBatchDetailPage } from '@/pages/import-batch-detail';
+import { ImportBatchesPage } from '@/pages/import-batches';
 import { LoginPage } from '@/pages/login';
 import { ProductDetailPage } from '@/pages/product-detail';
 import { ProductsListPage } from '@/pages/products-list';
@@ -29,6 +31,13 @@ export const router = createBrowserRouter([
               { path: 'products', element: <ProductsListPage /> },
               { path: 'products/:productId', element: <ProductDetailPage /> },
               { path: 'taxonomy', element: <TaxonomyPage /> },
+            ],
+          },
+          {
+            element: <RequirePermission permission="import.read" />,
+            children: [
+              { path: 'import', element: <ImportBatchesPage /> },
+              { path: 'import/:batchId', element: <ImportBatchDetailPage /> },
             ],
           },
         ],

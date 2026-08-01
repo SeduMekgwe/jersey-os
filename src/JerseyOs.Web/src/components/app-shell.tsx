@@ -1,5 +1,15 @@
 ﻿import * as Dialog from '@radix-ui/react-dialog';
-import { Activity, LayoutDashboard, LogOut, Menu, Package, ShieldCheck, Tags, X } from 'lucide-react';
+import {
+  Activity,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  Package,
+  ShieldCheck,
+  Tags,
+  Upload,
+  X,
+} from 'lucide-react';
 import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '@/auth/auth-context';
@@ -10,6 +20,7 @@ const nav = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/products', label: 'Products', icon: Package, end: false },
   { to: '/taxonomy', label: 'Taxonomy', icon: Tags, end: false },
+  { to: '/import', label: 'Import', icon: Upload, end: false },
   { to: '/system-health', label: 'System health', icon: Activity, end: false },
 ];
 function Navigation({ onNavigate }: { onNavigate?: () => void }) {
@@ -76,7 +87,7 @@ export function AppShell() {
             </Button>
           </Dialog.Trigger>
           <div className="flex flex-1 items-center justify-between">
-            <span className="font-semibold">Product catalog</span>
+            <span className="font-semibold">Catalog & import</span>
             <div className="text-right">
               <p className="text-sm font-medium">{user?.displayName}</p>
               <p className="text-xs text-muted-foreground">{user?.email}</p>

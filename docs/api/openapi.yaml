@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: Jersey OS API
   version: 1.0.0
-  description: Platform and product catalog HTTP contract for Jersey OS.
+  description: Platform, catalog, and supplier import HTTP contract for Jersey OS.
 servers:
   - url: /api/v1
 paths:
@@ -605,6 +605,184 @@ paths:
           description: Not found
         '409':
           description: Concurrency conflict
+  /import/suppliers:
+    get:
+      operationId: listSuppliers
+      tags: [Import]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Suppliers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SupplierResponse'
+    post:
+      operationId: createSupplier
+      tags: [Import]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSupplierRequest'
+      responses:
+        '200':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupplierResponse'
+  /import/batches:
+    get:
+      operationId: listImportBatches
+      tags: [Import]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Import batches
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ImportBatchSummaryResponse'
+    post:
+      operationId: uploadImportBatch
+      tags: [Import]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [supplierId, file]
+              properties:
+                supplierId: { type: string, format: uuid }
+                file: { type: string, format: binary }
+      responses:
+        '201':
+          description: Uploaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportBatchSummaryResponse'
+  /import/batches/{batchId}:
+    get:
+      operationId: getImportBatch
+      tags: [Import]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: batchId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Batch detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportBatchDetailResponse'
+        '404':
+          description: Not found
+  /import/items/{itemId}:
+    put:
+      operationId: updateImportItem
+      tags: [Import]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: itemId
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateImportItemRequest'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportItemResponse'
+        '404':
+          description: Not found
+  /import/items/{itemId}/approve:
+    post:
+      operationId: approveImportItem
+      tags: [Import]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: itemId
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewImportItemRequest'
+      responses:
+        '200':
+          description: Approved and applied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportItemResponse'
+        '404':
+          description: Not found
+  /import/items/{itemId}/reject:
+    post:
+      operationId: rejectImportItem
+      tags: [Import]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: itemId
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewImportItemRequest'
+      responses:
+        '200':
+          description: Rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportItemResponse'
+        '404':
+          description: Not found
+  /import/items/bulk-approve:
+    post:
+      operationId: bulkApproveImportItems
+      tags: [Import]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkApproveImportItemsRequest'
+      responses:
+        '200':
+          description: Approved items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ImportItemResponse'
 components:
   securitySchemes:
     bearerAuth:
@@ -855,3 +1033,92 @@ components:
         deltaOnHand: { type: integer }
         reason: { type: string }
         expectedRowVersion: { type: string, nullable: true }
+    SupplierResponse:
+      type: object
+      required: [id, name, code]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        code: { type: string }
+    CreateSupplierRequest:
+      type: object
+      required: [name, code]
+      properties:
+        name: { type: string }
+        code: { type: string }
+    ImportBatchSummaryResponse:
+      type: object
+      required: [id, supplierId, supplierName, fileName, status, itemCount, pendingCount, createdAtUtc]
+      properties:
+        id: { type: string, format: uuid }
+        supplierId: { type: string, format: uuid }
+        supplierName: { type: string }
+        fileName: { type: string }
+        status: { type: string }
+        itemCount: { type: integer }
+        pendingCount: { type: integer }
+        errorSummary: { type: string, nullable: true }
+        createdAtUtc: { type: string, format: date-time }
+    ImportItemResponse:
+      type: object
+      required: [id, batchId, status, matchHint, name, slug, sku, size]
+      properties:
+        id: { type: string, format: uuid }
+        batchId: { type: string, format: uuid }
+        status: { type: string }
+        matchHint: { type: string }
+        name: { type: string }
+        slug: { type: string }
+        sku: { type: string }
+        size: { type: string }
+        styleCode: { type: string, nullable: true }
+        teamName: { type: string, nullable: true }
+        seasonName: { type: string, nullable: true }
+        quantity: { type: integer, nullable: true }
+        imageUrl: { type: string, nullable: true }
+        matchedProductId: { type: string, format: uuid, nullable: true }
+        matchedVariantId: { type: string, format: uuid, nullable: true }
+        appliedProductId: { type: string, format: uuid, nullable: true }
+        appliedVariantId: { type: string, format: uuid, nullable: true }
+        reviewNote: { type: string, nullable: true }
+    ImportBatchDetailResponse:
+      type: object
+      required: [id, supplierId, supplierName, fileName, status, correlationId, createdAtUtc, items]
+      properties:
+        id: { type: string, format: uuid }
+        supplierId: { type: string, format: uuid }
+        supplierName: { type: string }
+        fileName: { type: string }
+        status: { type: string }
+        errorSummary: { type: string, nullable: true }
+        correlationId: { type: string }
+        createdAtUtc: { type: string, format: date-time }
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ImportItemResponse'
+    UpdateImportItemRequest:
+      type: object
+      required: [name, slug, sku, size]
+      properties:
+        name: { type: string }
+        slug: { type: string }
+        sku: { type: string }
+        size: { type: string }
+        styleCode: { type: string, nullable: true }
+        teamName: { type: string, nullable: true }
+        seasonName: { type: string, nullable: true }
+        quantity: { type: integer, nullable: true }
+        imageUrl: { type: string, nullable: true }
+    ReviewImportItemRequest:
+      type: object
+      properties:
+        note: { type: string, nullable: true }
+    BulkApproveImportItemsRequest:
+      type: object
+      required: [itemIds]
+      properties:
+        itemIds:
+          type: array
+          items: { type: string, format: uuid }
+        note: { type: string, nullable: true }

@@ -106,3 +106,15 @@ erDiagram
 ```
 
 Unique constraints include `(organization_id, slug)` on products and taxonomy, and `(organization_id, sku)` on variants. Inventory concurrency uses a SQL Server `rowversion` token.
+
+## Import model
+
+Tables are prefixed `import_` and organization-filtered.
+
+```mermaid
+erDiagram
+  SUPPLIER ||--o{ IMPORT_BATCH : provides
+  IMPORT_BATCH ||--o{ IMPORT_ITEM : contains
+```
+
+Batches track parse/review lifecycle; items store proposed fields, match hints, and applied product/variant links after approve.

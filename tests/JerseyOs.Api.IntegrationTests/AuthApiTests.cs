@@ -256,6 +256,62 @@ public sealed class AuthApiTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ImportReviewDeniedWithoutPermission()
+    {
+        if (!EnsureDockerOrSkip())
+        {
+            return;
+        }
+
+        await using var scope = _factory!.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<JerseyOsDbContext>();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var orgId = Guid.Parse("0190f2f2-67a1-7b11-a9e8-5f4921816f53");
+        var reader = new ApplicationUser
+        {
+            UserName = "import-reader@example.invalid",
+            Email = "import-reader@example.invalid",
+            EmailConfirmed = true,
+            IsActive = true
+        };
+        Assert.True((await users.CreateAsync(reader, "Str0ng!Passw0rd#1")).Succeeded);
+        var membership = new OrganizationMembership { OrganizationId = orgId, UserId = reader.Id };
+        db.OrganizationMemberships.Add(membership);
+        var role = new ApplicationRole { OrganizationId = orgId, Name = "ImportReader", NormalizedName = "IMPORTREADER" };
+        db.Roles.Add(role);
+        await db.SaveChangesAsync();
+        db.MembershipRoles.Add(new MembershipRole
+        {
+            OrganizationId = orgId,
+            MembershipId = membership.Id,
+            RoleId = role.Id
+        });
+        var readPermission = await db.PermissionsSet.SingleAsync(x => x.Key == Permissions.ImportRead);
+        db.RolePermissions.Add(new RolePermissionGrant
+        {
+            OrganizationId = orgId,
+            RoleId = role.Id,
+            PermissionId = readPermission.Id
+        });
+        await db.SaveChangesAsync();
+
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = true });
+        var login = await client.PostAsJsonAsync(
+            "/api/v1/auth/login",
+            new LoginRequest("import-reader@example.invalid", "Str0ng!Passw0rd#1"));
+        var auth = await login.Content.ReadFromJsonAsync<AuthResponse>();
+        Assert.NotNull(auth);
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", auth.AccessToken);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/v1/import/batches")).StatusCode);
+        Assert.Equal(
+            HttpStatusCode.Forbidden,
+            (await client.PostAsJsonAsync(
+                $"/api/v1/import/items/{Guid.NewGuid()}/approve",
+                new ReviewImportItemRequest(null))).StatusCode);
+    }
+
+    [Fact]
     public async Task AdminCanCreateProductVariantAndAdjustInventory()
     {
         if (!EnsureDockerOrSkip())

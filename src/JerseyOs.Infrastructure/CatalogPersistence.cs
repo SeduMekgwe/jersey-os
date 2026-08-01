@@ -51,6 +51,17 @@ public sealed class LocalObjectStorage(IOptions<ObjectStorageOptions> options, I
         return $"{basePath}/{key.TrimStart('/')}";
     }
 
+    public Stream OpenRead(string key)
+    {
+        var path = ResolvePath(key);
+        if (!File.Exists(path))
+        {
+            throw new FileNotFoundException("Import object was not found in local storage.", path);
+        }
+
+        return File.OpenRead(path);
+    }
+
     private string ResolvePath(string key)
     {
         var relative = key.Replace('\\', '/').TrimStart('/');

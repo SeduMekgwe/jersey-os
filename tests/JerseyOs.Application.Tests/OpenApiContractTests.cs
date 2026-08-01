@@ -16,8 +16,10 @@ public sealed class OpenApiContractTests
         Assert.Contains("/system/health:", document, StringComparison.Ordinal);
         Assert.Contains("/catalog/products:", document, StringComparison.Ordinal);
         Assert.Contains("/inventory/variants/{variantId}/adjust:", document, StringComparison.Ordinal);
+        Assert.Contains("/import/batches:", document, StringComparison.Ordinal);
         Assert.Contains("operationId: login", document, StringComparison.Ordinal);
         Assert.Contains("operationId: createProduct", document, StringComparison.Ordinal);
+        Assert.Contains("operationId: uploadImportBatch", document, StringComparison.Ordinal);
         Assert.Contains("UserResponse", document, StringComparison.Ordinal);
         Assert.Contains("ProductResponse", document, StringComparison.Ordinal);
     }
