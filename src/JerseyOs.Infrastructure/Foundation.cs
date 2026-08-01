@@ -2,12 +2,14 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Hangfire;
 using Hangfire.SqlServer;
 using JerseyOs.Application;
 using JerseyOs.Contracts;
 using JerseyOs.Domain;
 using JerseyOs.SharedKernel;
+using MediatR;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
@@ -42,13 +44,16 @@ public static class Permissions
 {
     public const string PlatformRead = "platform.read";
     public const string PlatformAdmin = "platform.admin";
-    public static readonly string[] All = [PlatformRead, PlatformAdmin];
+    public const string SystemHealthRead = "system.health.read";
+    public static readonly string[] All = [PlatformRead, PlatformAdmin, SystemHealthRead];
 }
 
 public sealed class JerseyOsDbContext(
     DbContextOptions<JerseyOsDbContext> options,
     ICurrentRequest currentRequest,
-    IOptions<DatabaseOptions> databaseOptions)
+    IOptions<DatabaseOptions> databaseOptions,
+    IPublisher publisher,
+    IIntegrationEventPublisher integrationEvents)
     : IdentityDbContext<ApplicationUser, ApplicationRole, Guid>(options), IApplicationDbContext
 {
     private Guid EffectiveOrganizationId =>
@@ -56,8 +61,8 @@ public sealed class JerseyOsDbContext(
 
     public DbSet<Organization> OrganizationsSet => Set<Organization>();
     public DbSet<OrganizationMembership> OrganizationMemberships => Set<OrganizationMembership>();
-    public DbSet<Permission> PermissionsSet => Set<Permission>();
-    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+    public DbSet<PermissionDefinition> PermissionsSet => Set<PermissionDefinition>();
+    public DbSet<RolePermissionGrant> RolePermissions => Set<RolePermissionGrant>();
     public DbSet<MembershipRole> MembershipRoles => Set<MembershipRole>();
     public DbSet<RefreshTokenSession> RefreshTokenSessionsSet => Set<RefreshTokenSession>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
@@ -99,13 +104,13 @@ public sealed class JerseyOsDbContext(
             b.HasIndex(x => new { x.OrganizationId, x.UserId }).IsUnique();
             b.HasQueryFilter(x => !x.IsDeleted && x.OrganizationId == EffectiveOrganizationId);
         });
-        builder.Entity<Permission>(b =>
+        builder.Entity<PermissionDefinition>(b =>
         {
             b.ToTable("Permissions");
             b.Property(x => x.Key).HasMaxLength(150).IsRequired();
             b.HasIndex(x => x.Key).IsUnique();
         });
-        builder.Entity<RolePermission>(b =>
+        builder.Entity<RolePermissionGrant>(b =>
         {
             b.ToTable("RolePermissions");
             b.HasIndex(x => new { x.RoleId, x.PermissionId }).IsUnique();
@@ -179,7 +184,59 @@ public sealed class JerseyOsDbContext(
             entry.Entity.DeletedAtUtc = now;
             entry.Entity.DeletedBy = actor;
         }
+
+        var domainEvents = ChangeTracker.Entries<Entity>()
+            .Select(e => e.Entity)
+            .Where(e => e.DomainEvents.Count > 0)
+            .SelectMany(e =>
+            {
+                var events = e.DomainEvents.ToArray();
+                e.ClearDomainEvents();
+                return events;
+            })
+            .ToArray();
+
+        foreach (var notification in DomainEventMapper.ToNotifications(
+                     domainEvents, EffectiveOrganizationId, currentRequest.CorrelationId))
+        {
+            await publisher.Publish(notification, cancellationToken).ConfigureAwait(false);
+        }
+
+        FlushIntegrationEvents();
         return await base.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private void FlushIntegrationEvents()
+    {
+        if (integrationEvents is not OutboxIntegrationEventPublisher outbox)
+        {
+            return;
+        }
+
+        foreach (var envelope in outbox.Dequeue())
+        {
+            OutboxMessagesSet.Add(new OutboxMessage
+            {
+                OrganizationId = envelope.OrganizationId,
+                Type = envelope.EventType,
+                CorrelationId = envelope.CorrelationId,
+                PayloadJson = JsonSerializer.Serialize(envelope)
+            });
+        }
+    }
+}
+
+public sealed class OutboxIntegrationEventPublisher : IIntegrationEventPublisher
+{
+    private readonly List<IntegrationEventEnvelope> _pending = [];
+
+    public void Enqueue(IntegrationEventEnvelope envelope) => _pending.Add(envelope);
+
+    public IReadOnlyList<IntegrationEventEnvelope> Dequeue()
+    {
+        var batch = _pending.ToArray();
+        _pending.Clear();
+        return batch;
     }
 }
 
@@ -253,7 +310,7 @@ public sealed class IdentityService(
         var user = await db.Users.AsNoTracking().SingleOrDefaultAsync(x => x.Id == userId, cancellationToken);
         if (user is null) return null;
         var permissions = await PermissionKeysAsync(userId, organizationId, cancellationToken);
-        return new UserResponse(user.Id, user.Email ?? string.Empty, organizationId, permissions);
+        return new UserResponse(user.Id, DisplayNameFor(user), user.Email ?? string.Empty, organizationId, permissions);
     }
 
     private async Task<IssuedAuth> IssueAsync(
@@ -283,11 +340,14 @@ public sealed class IdentityService(
             ExpiresAtUtc = now.AddDays(options.RefreshDays)
         });
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        var dto = new UserResponse(user.Id, user.Email ?? string.Empty, organizationId, permissionKeys);
+        var dto = new UserResponse(user.Id, DisplayNameFor(user), user.Email ?? string.Empty, organizationId, permissionKeys);
         return new IssuedAuth(
             new AuthResponse(new JwtSecurityTokenHandler().WriteToken(token), expires, dto),
             refreshToken, now.AddDays(options.RefreshDays));
     }
+
+    private static string DisplayNameFor(ApplicationUser user) =>
+        string.IsNullOrWhiteSpace(user.UserName) ? (user.Email ?? user.Id.ToString()) : user.UserName;
 
     private async Task<string[]> PermissionKeysAsync(Guid userId, Guid organizationId, CancellationToken cancellationToken) =>
         await (from membership in db.OrganizationMemberships.IgnoreQueryFilters()
@@ -365,6 +425,8 @@ public static class DependencyInjection
         var connectionString = configuration[$"{DatabaseOptions.Section}:ConnectionString"]
             ?? throw new InvalidOperationException("Database connection string is required.");
         var redisConnection = configuration["Redis:ConnectionString"] ?? "localhost:6379,abortConnect=false";
+        services.AddScoped<OutboxIntegrationEventPublisher>();
+        services.AddScoped<IIntegrationEventPublisher>(sp => sp.GetRequiredService<OutboxIntegrationEventPublisher>());
         services.AddDbContext<JerseyOsDbContext>(o => o.UseSqlServer(connectionString));
         services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<JerseyOsDbContext>());
         services.AddIdentityCore<ApplicationUser>(o =>
@@ -374,6 +436,8 @@ public static class DependencyInjection
             o.User.RequireUniqueEmail = true;
         }).AddRoles<ApplicationRole>().AddEntityFrameworkStores<JerseyOsDbContext>();
         services.AddScoped<IIdentityService, IdentityService>();
+        services.AddSingleton<IExternalIdentityProvider, UnsupportedExternalIdentityProvider>();
+        services.AddSingleton<IPasswordlessIdentityProvider, UnsupportedPasswordlessIdentityProvider>();
         services.AddScoped<OutboxDispatcher>();
         services.AddScoped<OutboxPump>();
         services.AddSingleton(TimeProvider.System);
@@ -388,25 +452,31 @@ public static class DependencyInjection
         }));
 
         var jwt = configuration.GetSection(JwtOptions.Section).Get<JwtOptions>() ?? new JwtOptions();
-        if (Encoding.UTF8.GetByteCount(jwt.SigningKey) < 32)
-            throw new InvalidOperationException("JWT signing key must be at least 32 bytes.");
-        services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o =>
+        if (!string.IsNullOrWhiteSpace(jwt.SigningKey))
         {
-            o.MapInboundClaims = false;
-            o.TokenValidationParameters = new TokenValidationParameters
+            if (Encoding.UTF8.GetByteCount(jwt.SigningKey) < 32)
+                throw new InvalidOperationException("JWT signing key must be at least 32 bytes.");
+            services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o =>
             {
-                ValidateIssuer = true, ValidIssuer = jwt.Issuer,
-                ValidateAudience = true, ValidAudience = jwt.Audience,
-                ValidateIssuerSigningKey = true,
-                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.SigningKey)),
-                ValidateLifetime = true,
-                ClockSkew = TimeSpan.FromSeconds(30),
-                NameClaimType = JwtRegisteredClaimNames.Sub
-            };
-        });
-        services.AddAuthorizationBuilder()
-            .AddPolicy(Permissions.PlatformRead, p => p.RequireClaim("permission", Permissions.PlatformRead))
-            .AddPolicy(Permissions.PlatformAdmin, p => p.RequireClaim("permission", Permissions.PlatformAdmin));
+                o.MapInboundClaims = false;
+                o.TokenValidationParameters = new TokenValidationParameters
+                {
+                    ValidateIssuer = true,
+                    ValidIssuer = jwt.Issuer,
+                    ValidateAudience = true,
+                    ValidAudience = jwt.Audience,
+                    ValidateIssuerSigningKey = true,
+                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.SigningKey)),
+                    ValidateLifetime = true,
+                    ClockSkew = TimeSpan.FromSeconds(30),
+                    NameClaimType = JwtRegisteredClaimNames.Sub
+                };
+            });
+            services.AddAuthorizationBuilder()
+                .AddPolicy(Permissions.PlatformRead, p => p.RequireClaim("permission", Permissions.PlatformRead))
+                .AddPolicy(Permissions.PlatformAdmin, p => p.RequireClaim("permission", Permissions.PlatformAdmin))
+                .AddPolicy(Permissions.SystemHealthRead, p => p.RequireClaim("permission", Permissions.SystemHealthRead));
+        }
         return services;
     }
 }

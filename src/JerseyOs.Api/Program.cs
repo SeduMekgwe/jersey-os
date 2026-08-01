@@ -1,24 +1,29 @@
+using System.Globalization;
 using System.Threading.RateLimiting;
+using Asp.Versioning;
 using FluentValidation;
 using JerseyOs.Api;
 using JerseyOs.Application;
 using JerseyOs.Infrastructure;
 using MediatR;
-using Microsoft.AspNetCore.Diagnostics;
-using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Serilog;
 
+const long MaxRequestBodyBytes = 1_048_576;
+
 var builder = WebApplication.CreateBuilder(args);
+builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = MaxRequestBodyBytes);
 builder.Host.UseSerilog((context, services, logger) => logger
     .ReadFrom.Configuration(context.Configuration)
     .ReadFrom.Services(services)
     .Enrich.FromLogContext()
     .Enrich.WithEnvironmentName()
-    .WriteTo.Console());
+    .WriteTo.Console(formatProvider: CultureInfo.InvariantCulture));
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentRequest, HttpCurrentRequest>();
@@ -29,14 +34,21 @@ builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBeh
 builder.Services.AddProblemDetails(options => options.CustomizeProblemDetails = context =>
     context.ProblemDetails.Extensions["traceId"] = context.HttpContext.TraceIdentifier);
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
+builder.Services.Configure<FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = MaxRequestBodyBytes;
+    options.ValueLengthLimit = checked((int)MaxRequestBodyBytes);
+});
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
-builder.Services.AddApiVersioning(options =>
-{
-    options.DefaultApiVersion = new(1);
-    options.AssumeDefaultVersionWhenUnspecified = true;
-    options.ReportApiVersions = true;
-});
+builder.Services
+    .AddApiVersioning(options =>
+    {
+        options.DefaultApiVersion = new ApiVersion(1, 0);
+        options.AssumeDefaultVersionWhenUnspecified = true;
+        options.ReportApiVersions = true;
+    })
+    .AddMvc();
 var origins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
 builder.Services.AddCors(o => o.AddPolicy("api", p =>
     p.WithOrigins(origins).AllowAnyHeader().AllowAnyMethod().AllowCredentials()));
@@ -83,9 +95,18 @@ app.UseCors("api");
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
-if (app.Environment.IsDevelopment()) app.MapOpenApi();
-app.MapHealthChecks("/health/live", new() { Predicate = _ => false });
-app.MapHealthChecks("/health/ready", new() { Predicate = check => check.Tags.Contains("ready") });
+app.Use(async (context, next) =>
+{
+    var feature = context.Features.Get<IHttpMaxRequestBodySizeFeature>();
+    if (feature is { IsReadOnly: false })
+    {
+        feature.MaxRequestBodySize = MaxRequestBodyBytes;
+    }
+    await next();
+});
+app.MapOpenApi();
+app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
+app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") });
 app.MapControllers();
 
 if (!app.Environment.IsEnvironment("Testing"))

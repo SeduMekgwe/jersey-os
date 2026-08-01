@@ -1,3 +1,4 @@
+using System.Globalization;
 using Hangfire;
 using JerseyOs.Application;
 using JerseyOs.Infrastructure;
@@ -20,7 +21,7 @@ builder.Services.AddSerilog((services, logger) => logger
     .ReadFrom.Services(services)
     .Enrich.FromLogContext()
     .Enrich.WithEnvironmentName()
-    .WriteTo.Console());
+    .WriteTo.Console(formatProvider: CultureInfo.InvariantCulture));
 
 var host = builder.Build();
 using (var scope = host.Services.CreateScope())

@@ -42,7 +42,7 @@ public sealed class ApplicationRole : IdentityRole<Guid>, IAuditableEntity, IOrg
     public DateTimeOffset ModifiedAtUtc { get; set; }
     public string ModifiedBy { get; set; } = string.Empty;
     public byte[] RowVersion { get; set; } = [];
-    public ICollection<RolePermission> Permissions { get; } = [];
+    public ICollection<RolePermissionGrant> PermissionGrants { get; } = [];
 }
 
 public sealed class OrganizationMembership : SoftDeletableEntity, IOrganizationScoped
@@ -54,19 +54,19 @@ public sealed class OrganizationMembership : SoftDeletableEntity, IOrganizationS
     public ICollection<MembershipRole> Roles { get; } = [];
 }
 
-public sealed class Permission : AuditableEntity
+public sealed class PermissionDefinition : AuditableEntity
 {
     public string Key { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
 }
 
-public sealed class RolePermission : AuditableEntity, IOrganizationScoped
+public sealed class RolePermissionGrant : AuditableEntity, IOrganizationScoped
 {
     public Guid OrganizationId { get; set; }
     public Guid RoleId { get; set; }
     public Guid PermissionId { get; set; }
     public ApplicationRole Role { get; set; } = null!;
-    public Permission Permission { get; set; } = null!;
+    public PermissionDefinition Permission { get; set; } = null!;
 }
 
 public sealed class MembershipRole : AuditableEntity, IOrganizationScoped

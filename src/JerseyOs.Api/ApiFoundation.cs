@@ -8,6 +8,8 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 namespace JerseyOs.Api;
 
@@ -23,7 +25,7 @@ public sealed class HttpCurrentRequest(IHttpContextAccessor accessor) : ICurrent
 public sealed class ApiExceptionHandler(IProblemDetailsService problemDetails) : IExceptionHandler
 {
     public async ValueTask<bool> TryHandleAsync(
-        HttpContext context, Exception exception, CancellationToken cancellationToken)
+        HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
         var (status, title, detail) = exception switch
         {
@@ -33,10 +35,10 @@ public sealed class ApiExceptionHandler(IProblemDetailsService problemDetails) :
                 string.Join("; ", validation.Errors.Select(x => x.ErrorMessage))),
             _ => (StatusCodes.Status500InternalServerError, "An unexpected error occurred", (string?)null)
         };
-        context.Response.StatusCode = status;
+        httpContext.Response.StatusCode = status;
         return await problemDetails.TryWriteAsync(new ProblemDetailsContext
         {
-            HttpContext = context,
+            HttpContext = httpContext,
             ProblemDetails = new ProblemDetails
             {
                 Type = $"https://www.rfc-editor.org/rfc/rfc9110#name-{status}",
@@ -50,11 +52,14 @@ public sealed class ApiExceptionHandler(IProblemDetailsService problemDetails) :
 }
 
 [ApiController]
-[ApiVersion(1)]
+[ApiVersion(1.0)]
 [Route("api/v{version:apiVersion}/auth")]
 public sealed class AuthController(ISender sender) : ControllerBase
 {
-    private const string RefreshCookie = "__Host-jersey-refresh";
+    private const string HostRefreshCookie = "__Host-jersey-refresh";
+    private const string DevRefreshCookie = "jersey-refresh";
+
+    private string RefreshCookieName => Request.IsHttps ? HostRefreshCookie : DevRefreshCookie;
 
     [HttpPost("login")]
     [AllowAnonymous]
@@ -73,7 +78,7 @@ public sealed class AuthController(ISender sender) : ControllerBase
     [EnableRateLimiting("auth")]
     public async Task<ActionResult<AuthResponse>> Refresh(CancellationToken cancellationToken)
     {
-        if (!Request.Cookies.TryGetValue(RefreshCookie, out var token)) return Unauthorized();
+        if (!TryReadRefreshCookie(out var token)) return Unauthorized();
         var issued = await sender.Send(new RefreshCommand(token), cancellationToken);
         if (issued is null)
         {
@@ -88,7 +93,7 @@ public sealed class AuthController(ISender sender) : ControllerBase
     [Authorize]
     public async Task<IActionResult> Logout(CancellationToken cancellationToken)
     {
-        Request.Cookies.TryGetValue(RefreshCookie, out var token);
+        TryReadRefreshCookie(out var token);
         await sender.Send(new LogoutCommand(token), cancellationToken);
         DeleteRefreshCookie();
         return NoContent();
@@ -106,23 +111,54 @@ public sealed class AuthController(ISender sender) : ControllerBase
     [Authorize(Policy = Permissions.PlatformAdmin)]
     public IActionResult AdminProbe() => NoContent();
 
+    private bool TryReadRefreshCookie(out string token) =>
+        Request.Cookies.TryGetValue(RefreshCookieName, out token!)
+        || Request.Cookies.TryGetValue(HostRefreshCookie, out token!)
+        || Request.Cookies.TryGetValue(DevRefreshCookie, out token!);
+
     private void SetRefreshCookie(IssuedAuth issued) =>
-        Response.Cookies.Append(RefreshCookie, issued.RefreshToken, new CookieOptions
+        Response.Cookies.Append(RefreshCookieName, issued.RefreshToken, new CookieOptions
         {
             HttpOnly = true,
-            Secure = true,
+            Secure = Request.IsHttps,
             SameSite = SameSiteMode.Strict,
             Path = "/",
             Expires = issued.RefreshExpiresAtUtc,
             IsEssential = true
         });
 
-    private void DeleteRefreshCookie() =>
-        Response.Cookies.Delete(RefreshCookie, new CookieOptions
+    private void DeleteRefreshCookie()
+    {
+        foreach (var name in new[] { RefreshCookieName, HostRefreshCookie, DevRefreshCookie }.Distinct())
         {
-            HttpOnly = true,
-            Secure = true,
-            SameSite = SameSiteMode.Strict,
-            Path = "/"
-        });
+            Response.Cookies.Delete(name, new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = Request.IsHttps,
+                SameSite = SameSiteMode.Strict,
+                Path = "/"
+            });
+        }
+    }
+}
+
+[ApiController]
+[ApiVersion(1.0)]
+[Authorize(Policy = Permissions.SystemHealthRead)]
+[Route("api/v{version:apiVersion}/system")]
+public sealed class SystemController(HealthCheckService healthChecks) : ControllerBase
+{
+    [HttpGet("health")]
+    [ProducesResponseType<SystemHealthResponse>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<SystemHealthResponse>> Health(CancellationToken cancellationToken)
+    {
+        var report = await healthChecks.CheckHealthAsync(cancellationToken);
+        var checks = report.Entries
+            .Select(entry => new HealthCheckResponse(
+                entry.Key,
+                entry.Value.Status.ToString(),
+                entry.Value.Description ?? entry.Value.Exception?.Message))
+            .ToArray();
+        return Ok(new SystemHealthResponse(report.Status.ToString(), DateTimeOffset.UtcNow, checks));
+    }
 }

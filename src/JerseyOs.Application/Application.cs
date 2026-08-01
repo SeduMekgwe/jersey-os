@@ -92,6 +92,6 @@ public sealed class ValidationBehavior<TRequest, TResponse>(IEnumerable<IValidat
             throw new ValidationException(failures);
         }
 
-        return await next().ConfigureAwait(false);
+        return await next(cancellationToken).ConfigureAwait(false);
     }
 }

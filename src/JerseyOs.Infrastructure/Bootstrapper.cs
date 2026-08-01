@@ -17,9 +17,13 @@ public static class Bootstrapper
         var slug = configuration["Bootstrap:OrganizationSlug"];
         var email = configuration["Bootstrap:AdminEmail"];
         var password = configuration["Bootstrap:AdminPassword"];
-        if (organizationId == Guid.Empty || string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(slug) ||
+        if (organizationId == Guid.Empty || string.IsNullOrWhiteSpace(name) ||
             string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
-            throw new InvalidOperationException("Enabled bootstrap requires organization id/name/slug and admin credentials.");
+            throw new InvalidOperationException("Enabled bootstrap requires organization id/name and admin credentials.");
+        slug = string.IsNullOrWhiteSpace(slug)
+            ? new string(name.ToLowerInvariant().Where(ch => char.IsLetterOrDigit(ch) || ch is '-' or ' ')
+                .Select(ch => ch == ' ' ? '-' : ch).ToArray()).Trim('-')
+            : slug;
 
         var db = services.GetRequiredService<JerseyOsDbContext>();
         var users = services.GetRequiredService<UserManager<ApplicationUser>>();
@@ -31,13 +35,13 @@ public static class Bootstrapper
             organization = new Organization(name, slug, now, organizationId);
             db.OrganizationsSet.Add(organization);
         }
-        var permissions = new List<Permission>();
+        var permissions = new List<PermissionDefinition>();
         foreach (var key in Permissions.All)
         {
             var permission = await db.PermissionsSet.SingleOrDefaultAsync(x => x.Key == key, cancellationToken);
             if (permission is null)
             {
-                permission = new Permission { Key = key, Description = key };
+                permission = new PermissionDefinition { Key = key, Description = key };
                 db.PermissionsSet.Add(permission);
             }
             permissions.Add(permission);
@@ -72,15 +76,19 @@ public static class Bootstrapper
             .AnyAsync(x => x.MembershipId == membership.Id && x.RoleId == role.Id, cancellationToken))
             db.MembershipRoles.Add(new MembershipRole
             {
-                OrganizationId = organizationId, MembershipId = membership.Id, RoleId = role.Id
+                OrganizationId = organizationId,
+                MembershipId = membership.Id,
+                RoleId = role.Id
             });
         foreach (var permission in permissions)
         {
             if (!await db.RolePermissions.IgnoreQueryFilters()
                 .AnyAsync(x => x.RoleId == role.Id && x.PermissionId == permission.Id, cancellationToken))
-                db.RolePermissions.Add(new RolePermission
+                db.RolePermissions.Add(new RolePermissionGrant
                 {
-                    OrganizationId = organizationId, RoleId = role.Id, PermissionId = permission.Id
+                    OrganizationId = organizationId,
+                    RoleId = role.Id,
+                    PermissionId = permission.Id
                 });
         }
         await db.SaveChangesAsync(cancellationToken);

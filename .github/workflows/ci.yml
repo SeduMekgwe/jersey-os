@@ -32,6 +32,8 @@ jobs:
         run: dotnet build JerseyOs.slnx --no-restore --configuration Release
       - name: Test
         run: dotnet test JerseyOs.slnx --no-build --configuration Release --collect:"XPlat Code Coverage" --results-directory TestResults
+      - name: NuGet audit
+        run: dotnet list JerseyOs.slnx package --vulnerable --include-transitive
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
@@ -57,6 +59,8 @@ jobs:
           cache: pnpm
           cache-dependency-path: src/JerseyOs.Web/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
+      - name: OpenAPI client drift check
+        run: pnpm check:api
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test -- --run --coverage

@@ -1,0 +1,4 @@
+[*.cs]
+
+# Generated EF migrations use inline column arrays.
+dotnet_diagnostic.CA1861.severity = none

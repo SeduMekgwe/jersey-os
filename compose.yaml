@@ -48,6 +48,7 @@ services:
       Jwt__SigningKey: ${JERSEYOS_JWT_SIGNING_KEY}
       Bootstrap__Enabled: "true"
       Bootstrap__OrganizationName: ${JERSEYOS_BOOTSTRAP_ORGANIZATION}
+      Bootstrap__OrganizationSlug: ${JERSEYOS_BOOTSTRAP_ORGANIZATION_SLUG:-jersey-no10-collective}
       Bootstrap__AdminEmail: ${JERSEYOS_BOOTSTRAP_ADMIN_EMAIL}
       Bootstrap__AdminPassword: ${JERSEYOS_BOOTSTRAP_ADMIN_PASSWORD}
       Cors__AllowedOrigins__0: http://localhost:4173

@@ -1,28 +1,16 @@
-/* Generator boundary: replace only this module with generated OpenAPI DTO exports. */
-export interface UserDto {
-  id: string;
-  displayName: string;
-  email: string;
-  permissions: string[];
-}
+/* Wrapper around generated OpenAPI types. Do not hand-edit api.generated.ts. */
+import type { components } from '@/types/api.generated';
+
+export type UserDto = components['schemas']['UserResponse'];
+export type LoginRequestDto = components['schemas']['LoginRequest'];
+export type HealthCheckDto = components['schemas']['HealthCheckResponse'];
+export type SystemHealthDto = components['schemas']['SystemHealthResponse'];
+
 export interface SessionDto {
-  accessToken: string;
+  accessToken: components['schemas']['AuthResponse']['accessToken'];
   user: UserDto;
 }
-export interface LoginRequestDto {
-  email: string;
-  password: string;
-}
-export interface HealthCheckDto {
-  name: string;
-  status: 'Healthy' | 'Degraded' | 'Unhealthy';
-  description?: string;
-}
-export interface SystemHealthDto {
-  status: 'Healthy' | 'Degraded' | 'Unhealthy';
-  checkedAt: string;
-  checks: HealthCheckDto[];
-}
+
 export interface ProblemDetailsDto {
   type?: string;
   title?: string;
@@ -31,5 +19,4 @@ export interface ProblemDetailsDto {
   instance?: string;
   errors?: Record<string, string[]>;
   traceId?: string;
-  [extension: string]: unknown;
 }
