@@ -118,3 +118,15 @@ erDiagram
 ```
 
 Batches track parse/review lifecycle; items store proposed fields, match hints, and applied product/variant links after approve.
+
+## Publishing model
+
+Tables are prefixed `publish_` and organization-filtered.
+
+```mermaid
+erDiagram
+  SALES_CHANNEL ||--o{ EXTERNAL_ID_MAP : maps
+  SALES_CHANNEL ||--o{ PUBLISH_RUN : tracks
+```
+
+`ExternalIdMap` keys on `(organization_id, channel_id, entity_type, local_id)`. `PublishRun` tracks the latest attempt per product/channel (`Pending` | `Succeeded` | `Failed`).

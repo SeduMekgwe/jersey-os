@@ -91,6 +91,15 @@ public static class Bootstrapper
                     PermissionId = permission.Id
                 });
         }
+
+        if (!await db.SalesChannelsSet.IgnoreQueryFilters()
+                .AnyAsync(
+                    x => x.OrganizationId == organizationId && x.Code == SalesChannelCodes.Shopify,
+                    cancellationToken))
+        {
+            db.SalesChannelsSet.Add(new SalesChannel(organizationId, SalesChannelCodes.Shopify, "Shopify", enabled: true));
+        }
+
         await db.SaveChangesAsync(cancellationToken);
     }
 }

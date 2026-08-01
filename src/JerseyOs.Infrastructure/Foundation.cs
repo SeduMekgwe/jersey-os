@@ -51,6 +51,8 @@ public static class Permissions
     public const string ImportRead = "import.read";
     public const string ImportUpload = "import.upload";
     public const string ImportReview = "import.review";
+    public const string PublishingRead = "publishing.read";
+    public const string PublishingManage = "publishing.manage";
     public static readonly string[] All =
     [
         PlatformRead,
@@ -61,7 +63,9 @@ public static class Permissions
         InventoryAdjust,
         ImportRead,
         ImportUpload,
-        ImportReview
+        ImportReview,
+        PublishingRead,
+        PublishingManage
     ];
 }
 
@@ -98,6 +102,9 @@ public sealed class JerseyOsDbContext(
     public DbSet<Supplier> SuppliersSet => Set<Supplier>();
     public DbSet<ImportBatch> ImportBatchesSet => Set<ImportBatch>();
     public DbSet<ImportItem> ImportItemsSet => Set<ImportItem>();
+    public DbSet<SalesChannel> SalesChannelsSet => Set<SalesChannel>();
+    public DbSet<ExternalIdMap> ExternalIdMapsSet => Set<ExternalIdMap>();
+    public DbSet<PublishRun> PublishRunsSet => Set<PublishRun>();
 
     IQueryable<Organization> IApplicationDbContext.Organizations => OrganizationsSet;
     IQueryable<RefreshTokenSession> IApplicationDbContext.RefreshTokenSessions => RefreshTokenSessionsSet;
@@ -113,6 +120,9 @@ public sealed class JerseyOsDbContext(
     IQueryable<Supplier> IApplicationDbContext.Suppliers => SuppliersSet;
     IQueryable<ImportBatch> IApplicationDbContext.ImportBatches => ImportBatchesSet;
     IQueryable<ImportItem> IApplicationDbContext.ImportItems => ImportItemsSet;
+    IQueryable<SalesChannel> IApplicationDbContext.SalesChannels => SalesChannelsSet;
+    IQueryable<ExternalIdMap> IApplicationDbContext.ExternalIdMaps => ExternalIdMapsSet;
+    IQueryable<PublishRun> IApplicationDbContext.PublishRuns => PublishRunsSet;
 
     void IApplicationDbContext.Add<TEntity>(TEntity entity) => Set<TEntity>().Add(entity);
     void IApplicationDbContext.Remove<TEntity>(TEntity entity) => Set<TEntity>().Remove(entity);
@@ -195,6 +205,7 @@ public sealed class JerseyOsDbContext(
         });
         builder.ConfigureCatalog(EffectiveOrganizationId);
         builder.ConfigureImport(EffectiveOrganizationId);
+        builder.ConfigurePublishing(EffectiveOrganizationId);
 
         foreach (var entityType in builder.Model.GetEntityTypes()
                      .Where(t => typeof(IAuditableEntity).IsAssignableFrom(t.ClrType)))
@@ -413,7 +424,10 @@ public sealed class IdentityService(
     }
 }
 
-public sealed class OutboxDispatcher(JerseyOsDbContext db, TimeProvider timeProvider)
+public sealed class OutboxDispatcher(
+    JerseyOsDbContext db,
+    TimeProvider timeProvider,
+    IPublishingJobScheduler publishingJobs)
 {
     [AutomaticRetry(Attempts = 5)]
     public async Task DispatchAsync(Guid messageId, CancellationToken cancellationToken)
@@ -422,10 +436,80 @@ public sealed class OutboxDispatcher(JerseyOsDbContext db, TimeProvider timeProv
             .SingleOrDefaultAsync(x => x.Id == messageId, cancellationToken).ConfigureAwait(false);
         if (message is null || message.ProcessedAtUtc is not null) return;
         message.Attempts++;
-        // Domain-specific transports subscribe here; completion is idempotently persisted.
-        message.ProcessedAtUtc = timeProvider.GetUtcNow();
-        message.Error = null;
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            RoutePublishingJobs(message);
+            message.ProcessedAtUtc = timeProvider.GetUtcNow();
+            message.Error = null;
+        }
+        catch (Exception exception)
+        {
+            message.Error = exception.Message;
+            throw;
+        }
+        finally
+        {
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private void RoutePublishingJobs(OutboxMessage message)
+    {
+        using var document = JsonDocument.Parse(message.PayloadJson);
+        var root = document.RootElement;
+        if (!TryGetProperty(root, "Payload", out var payload) && !TryGetProperty(root, "payload", out payload))
+        {
+            payload = root;
+        }
+
+        switch (message.Type)
+        {
+            case "jerseyos.product.activated":
+            case "jerseyos.product.updated":
+            {
+                var productId = ReadGuid(payload, "productId", "ProductId");
+                publishingJobs.EnqueuePublishProduct(message.OrganizationId, productId, unpublish: false);
+                break;
+            }
+            case "jerseyos.product.archived":
+            {
+                var productId = ReadGuid(payload, "productId", "ProductId");
+                publishingJobs.EnqueuePublishProduct(message.OrganizationId, productId, unpublish: true);
+                break;
+            }
+            case "jerseyos.inventory.adjusted":
+            {
+                var variantId = ReadGuid(payload, "variantId", "VariantId");
+                publishingJobs.EnqueueSyncInventory(message.OrganizationId, variantId);
+                break;
+            }
+        }
+    }
+
+    private static bool TryGetProperty(JsonElement element, string name, out JsonElement value) =>
+        element.TryGetProperty(name, out value);
+
+    private static Guid ReadGuid(JsonElement payload, params string[] propertyNames)
+    {
+        foreach (var propertyName in propertyNames)
+        {
+            if (!payload.TryGetProperty(propertyName, out var value))
+            {
+                continue;
+            }
+
+            if (value.ValueKind == JsonValueKind.String && Guid.TryParse(value.GetString(), out var parsed))
+            {
+                return parsed;
+            }
+
+            if (value.TryGetGuid(out parsed))
+            {
+                return parsed;
+            }
+        }
+
+        throw new InvalidOperationException($"Outbox payload missing '{propertyNames[0]}'.");
     }
 }
 
@@ -475,6 +559,7 @@ public static class DependencyInjection
         services.AddScoped<IIntegrationEventPublisher>(sp => sp.GetRequiredService<OutboxIntegrationEventPublisher>());
         services.AddObjectStorage(configuration);
         services.AddImportServices();
+        services.AddPublishingServices(configuration);
         services.AddDbContext<JerseyOsDbContext>(o => o.UseSqlServer(connectionString));
         services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<JerseyOsDbContext>());
         services.AddIdentityCore<ApplicationUser>(o =>
@@ -529,7 +614,9 @@ public static class DependencyInjection
                 .AddPolicy(Permissions.InventoryAdjust, p => p.RequireClaim("permission", Permissions.InventoryAdjust))
                 .AddPolicy(Permissions.ImportRead, p => p.RequireClaim("permission", Permissions.ImportRead))
                 .AddPolicy(Permissions.ImportUpload, p => p.RequireClaim("permission", Permissions.ImportUpload))
-                .AddPolicy(Permissions.ImportReview, p => p.RequireClaim("permission", Permissions.ImportReview));
+                .AddPolicy(Permissions.ImportReview, p => p.RequireClaim("permission", Permissions.ImportReview))
+                .AddPolicy(Permissions.PublishingRead, p => p.RequireClaim("permission", Permissions.PublishingRead))
+                .AddPolicy(Permissions.PublishingManage, p => p.RequireClaim("permission", Permissions.PublishingManage));
         }
         return services;
     }

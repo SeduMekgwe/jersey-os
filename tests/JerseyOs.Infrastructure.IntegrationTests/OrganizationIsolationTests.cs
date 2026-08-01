@@ -155,7 +155,7 @@ public sealed class OrganizationIsolationTests : IAsyncLifetime
         db.OutboxMessagesSet.Add(message);
         await db.SaveChangesAsync();
 
-        var dispatcher = new OutboxDispatcher(db, TimeProvider.System);
+        var dispatcher = new OutboxDispatcher(db, TimeProvider.System, new NoOpPublishingJobScheduler());
         await dispatcher.DispatchAsync(message.Id, CancellationToken.None);
         await dispatcher.DispatchAsync(message.Id, CancellationToken.None);
 
@@ -211,5 +211,16 @@ public sealed class OrganizationIsolationTests : IAsyncLifetime
         public Guid? OrganizationId => organizationId;
         public string Actor => actor;
         public string CorrelationId => "tests";
+    }
+
+    private sealed class NoOpPublishingJobScheduler : IPublishingJobScheduler
+    {
+        public void EnqueuePublishProduct(Guid organizationId, Guid productId, bool unpublish)
+        {
+        }
+
+        public void EnqueueSyncInventory(Guid organizationId, Guid variantId)
+        {
+        }
     }
 }

@@ -31,4 +31,16 @@ public sealed class DomainEventMapperTests
             Assert.Single(DomainEventMapper.ToNotifications([created], orgId, "corr-2")));
         Assert.Equal(productId, notification.DomainEvent.ProductId);
     }
+
+    [Fact]
+    public void MapsProductActivatedToNotification()
+    {
+        var orgId = Guid.NewGuid();
+        var productId = Guid.NewGuid();
+        var activated = new ProductActivated(productId, orgId, DateTimeOffset.UtcNow);
+
+        var notification = Assert.IsType<ProductActivatedNotification>(
+            Assert.Single(DomainEventMapper.ToNotifications([activated], orgId, "corr-3")));
+        Assert.Equal(productId, notification.DomainEvent.ProductId);
+    }
 }

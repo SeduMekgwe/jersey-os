@@ -7,6 +7,7 @@ import { ImportBatchesPage } from '@/pages/import-batches';
 import { LoginPage } from '@/pages/login';
 import { ProductDetailPage } from '@/pages/product-detail';
 import { ProductsListPage } from '@/pages/products-list';
+import { PublishingPage } from '@/pages/publishing';
 import { NotFoundPage, UnauthorizedPage } from '@/pages/status-pages';
 import { SystemHealthPage } from '@/pages/system-health';
 import { TaxonomyPage } from '@/pages/taxonomy';
@@ -39,6 +40,10 @@ export const router = createBrowserRouter([
               { path: 'import', element: <ImportBatchesPage /> },
               { path: 'import/:batchId', element: <ImportBatchDetailPage /> },
             ],
+          },
+          {
+            element: <RequirePermission permission="publishing.read" />,
+            children: [{ path: 'publishing', element: <PublishingPage /> }],
           },
         ],
       },

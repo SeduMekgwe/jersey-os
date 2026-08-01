@@ -26,6 +26,11 @@ public sealed record ProductUpdatedNotification(
     Guid OrganizationId,
     string CorrelationId) : INotification;
 
+public sealed record ProductActivatedNotification(
+    ProductActivated DomainEvent,
+    Guid OrganizationId,
+    string CorrelationId) : INotification;
+
 public sealed record ProductArchivedNotification(
     ProductArchived DomainEvent,
     Guid OrganizationId,
@@ -116,6 +121,33 @@ public sealed class ProductUpdatedHandler(IIntegrationEventPublisher publisher, 
     }
 }
 
+public sealed class ProductActivatedHandler(IIntegrationEventPublisher publisher, TimeProvider time)
+    : INotificationHandler<ProductActivatedNotification>
+{
+    public const int SchemaVersion = 1;
+
+    public Task Handle(ProductActivatedNotification notification, CancellationToken cancellationToken)
+    {
+        var payload = JsonSerializer.SerializeToElement(new
+        {
+            productId = notification.DomainEvent.ProductId,
+            organizationId = notification.DomainEvent.OrganizationId
+        });
+        publisher.Enqueue(new IntegrationEventEnvelope(
+            EventId: Guid.NewGuid(),
+            EventType: "jerseyos.product.activated",
+            SchemaVersion: SchemaVersion,
+            OrganizationId: notification.OrganizationId,
+            CorrelationId: notification.CorrelationId,
+            CausationId: notification.DomainEvent.ProductId.ToString("N"),
+            OccurredAtUtc: notification.DomainEvent.OccurredAtUtc == default
+                ? time.GetUtcNow()
+                : notification.DomainEvent.OccurredAtUtc,
+            Payload: payload));
+        return Task.CompletedTask;
+    }
+}
+
 public sealed class ProductArchivedHandler(IIntegrationEventPublisher publisher, TimeProvider time)
     : INotificationHandler<ProductArchivedNotification>
 {
@@ -191,6 +223,9 @@ public static class DomainEventMapper
                     break;
                 case ProductUpdated updated:
                     yield return new ProductUpdatedNotification(updated, organizationId, correlationId);
+                    break;
+                case ProductActivated activated:
+                    yield return new ProductActivatedNotification(activated, organizationId, correlationId);
                     break;
                 case ProductArchived archived:
                     yield return new ProductArchivedNotification(archived, organizationId, correlationId);

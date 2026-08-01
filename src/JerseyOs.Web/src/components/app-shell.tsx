@@ -5,6 +5,7 @@ import {
   LogOut,
   Menu,
   Package,
+  Radio,
   ShieldCheck,
   Tags,
   Upload,
@@ -21,6 +22,7 @@ const nav = [
   { to: '/products', label: 'Products', icon: Package, end: false },
   { to: '/taxonomy', label: 'Taxonomy', icon: Tags, end: false },
   { to: '/import', label: 'Import', icon: Upload, end: false },
+  { to: '/publishing', label: 'Publishing', icon: Radio, end: false },
   { to: '/system-health', label: 'System health', icon: Activity, end: false },
 ];
 function Navigation({ onNavigate }: { onNavigate?: () => void }) {

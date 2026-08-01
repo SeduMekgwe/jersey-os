@@ -11,6 +11,7 @@ public enum ProductStatus
 
 public sealed record ProductCreated(Guid ProductId, Guid OrganizationId, DateTimeOffset OccurredAtUtc) : IDomainEvent;
 public sealed record ProductUpdated(Guid ProductId, Guid OrganizationId, DateTimeOffset OccurredAtUtc) : IDomainEvent;
+public sealed record ProductActivated(Guid ProductId, Guid OrganizationId, DateTimeOffset OccurredAtUtc) : IDomainEvent;
 public sealed record ProductArchived(Guid ProductId, Guid OrganizationId, DateTimeOffset OccurredAtUtc) : IDomainEvent;
 public sealed record InventoryAdjusted(
     Guid VariantId,
@@ -186,7 +187,7 @@ public sealed class Product : AuditableEntity, IOrganizationScoped
         }
 
         Status = ProductStatus.Active;
-        Raise(new ProductUpdated(Id, OrganizationId, now));
+        Raise(new ProductActivated(Id, OrganizationId, now));
     }
 
     public void Archive(DateTimeOffset now)

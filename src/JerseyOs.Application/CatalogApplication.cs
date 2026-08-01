@@ -22,6 +22,9 @@ public interface IApplicationDbContext
     IQueryable<Supplier> Suppliers { get; }
     IQueryable<ImportBatch> ImportBatches { get; }
     IQueryable<ImportItem> ImportItems { get; }
+    IQueryable<SalesChannel> SalesChannels { get; }
+    IQueryable<ExternalIdMap> ExternalIdMaps { get; }
+    IQueryable<PublishRun> PublishRuns { get; }
 
     void Add<TEntity>(TEntity entity) where TEntity : class;
     void Remove<TEntity>(TEntity entity) where TEntity : class;

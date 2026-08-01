@@ -31,6 +31,7 @@ public sealed class ProductTests
         product.UpdateDetails("Away Kit", "away-kit", null, Guid.NewGuid(), Guid.NewGuid(), now);
         product.Activate(now);
         Assert.Equal(ProductStatus.Active, product.Status);
+        Assert.Single(product.DomainEvents.OfType<ProductActivated>());
     }
 
     [Fact]

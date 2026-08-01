@@ -9,6 +9,7 @@ import type {
   CreateProductDto,
   InventoryDto,
   ProductDto,
+  PublishRunDto,
   TaxonomyItemDto,
   UpsertVariantDto,
 } from '@/types/api';
@@ -21,6 +22,8 @@ export function ProductDetailPage() {
   const { user } = useAuth();
   const canWrite = user?.permissions.includes('catalog.write') ?? false;
   const canAdjust = user?.permissions.includes('inventory.adjust') ?? false;
+  const canPublish = user?.permissions.includes('publishing.manage') ?? false;
+  const canReadPublish = user?.permissions.includes('publishing.read') ?? false;
 
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
@@ -49,8 +52,17 @@ export function ProductDetailPage() {
     queryKey: ['catalog', 'seasons'],
     queryFn: () => apiRequest<TaxonomyItemDto[]>('/catalog/seasons'),
   });
+  const publishRunsQuery = useQuery({
+    queryKey: ['publishing', 'product-runs', productId],
+    enabled: !isNew && !!productId && canReadPublish,
+    queryFn: () => {
+      if (!productId) throw new Error('Product id is required.');
+      return apiRequest<PublishRunDto[]>(`/publishing/products/${productId}/runs`);
+    },
+  });
 
   const product = productQuery.data;
+  const latestPublishRun = publishRunsQuery.data?.[0];
   useEffect(() => {
     if (!product) return;
     setName(product.name);
@@ -130,6 +142,19 @@ export function ProductDetailPage() {
       setError(err.message);
     },
   });
+  const republishMutation = useMutation({
+    mutationFn: () =>
+      apiRequest<PublishRunDto>(`/publishing/products/${requireProductId()}/republish`, {
+        method: 'POST',
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['publishing', 'product-runs', productId] });
+      void queryClient.invalidateQueries({ queryKey: ['publishing', 'runs'] });
+    },
+    onError: (err: Error) => {
+      setError(err.message);
+    },
+  });
   const adjustMutation = useMutation({
     mutationFn: ({ variantId, body }: { variantId: string; body: AdjustInventoryDto }) =>
       apiRequest<InventoryDto>(`/inventory/variants/${variantId}/adjust`, {
@@ -169,6 +194,9 @@ export function ProductDetailPage() {
         </h1>
         <p className="mt-2 text-muted-foreground">
           {isNew ? 'Create a draft product.' : `Status: ${product?.status ?? '…'}`}
+          {latestPublishRun
+            ? ` · Publish: ${latestPublishRun.status}${latestPublishRun.error ? ` (${latestPublishRun.error})` : ''}`
+            : ''}
         </p>
       </div>
       {error && (
@@ -243,52 +271,65 @@ export function ProductDetailPage() {
             ))}
           </select>
         </label>
-        {canWrite && (
+        {(canWrite || canPublish) && (
           <div className="flex flex-wrap items-end gap-2 md:col-span-2">
-            {isNew ? (
+            {canWrite &&
+              (isNew ? (
+                <Button
+                  onClick={() => {
+                    setError(null);
+                    createMutation.mutate({
+                      name,
+                      slug,
+                      styleCode: styleCode || null,
+                      teamId: teamId || null,
+                      seasonId: seasonId || null,
+                    });
+                  }}
+                >
+                  Create draft
+                </Button>
+              ) : (
+                <>
+                  <Button
+                    onClick={() => {
+                      setError(null);
+                      saveMutation.mutate();
+                    }}
+                  >
+                    Save details
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setError(null);
+                      activateMutation.mutate();
+                    }}
+                  >
+                    Activate
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={() => {
+                      setError(null);
+                      archiveMutation.mutate();
+                    }}
+                  >
+                    Archive
+                  </Button>
+                </>
+              ))}
+            {canPublish && !isNew && product?.status === 'Active' && (
               <Button
+                variant="outline"
+                disabled={republishMutation.isPending}
                 onClick={() => {
                   setError(null);
-                  createMutation.mutate({
-                    name,
-                    slug,
-                    styleCode: styleCode || null,
-                    teamId: teamId || null,
-                    seasonId: seasonId || null,
-                  });
+                  republishMutation.mutate();
                 }}
               >
-                Create draft
+                Republish
               </Button>
-            ) : (
-              <>
-                <Button
-                  onClick={() => {
-                    setError(null);
-                    saveMutation.mutate();
-                  }}
-                >
-                  Save details
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setError(null);
-                    activateMutation.mutate();
-                  }}
-                >
-                  Activate
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={() => {
-                    setError(null);
-                    archiveMutation.mutate();
-                  }}
-                >
-                  Archive
-                </Button>
-              </>
             )}
           </div>
         )}

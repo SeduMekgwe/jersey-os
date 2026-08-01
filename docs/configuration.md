@@ -25,6 +25,9 @@ Configuration is loaded from `appsettings*.json`, environment variables, and an 
 | `Database__ConnectionString` | SQL Server connection | Yes | All |
 | `Database__DefaultOrganizationId` | Default org for single-tenant-ready mode | No | All |
 | `Jwt__SigningKey` | HMAC signing material (min 32 bytes) | Yes | All |
+| `Shopify__ShopDomain` | Shopify shop hostname (e.g. `demo.myshopify.com`) | No | Hosted when publishing |
+| `Shopify__AccessToken` | Admin API access token; empty selects null publisher | Yes | Hosted when publishing |
+| `Shopify__ApiVersion` | Admin GraphQL API version | No | Hosted when publishing |
 
 ## Rules
 

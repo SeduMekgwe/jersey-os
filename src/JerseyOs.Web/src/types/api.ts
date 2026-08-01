@@ -20,6 +20,8 @@ export type CreateSupplierDto = components['schemas']['CreateSupplierRequest'];
 export type ImportBatchSummaryDto = components['schemas']['ImportBatchSummaryResponse'];
 export type ImportBatchDetailDto = components['schemas']['ImportBatchDetailResponse'];
 export type ImportItemDto = components['schemas']['ImportItemResponse'];
+export type SalesChannelDto = components['schemas']['SalesChannelResponse'];
+export type PublishRunDto = components['schemas']['PublishRunResponse'];
 
 export interface SessionDto {
   accessToken: components['schemas']['AuthResponse']['accessToken'];
