@@ -5,6 +5,16 @@ export type UserDto = components['schemas']['UserResponse'];
 export type LoginRequestDto = components['schemas']['LoginRequest'];
 export type HealthCheckDto = components['schemas']['HealthCheckResponse'];
 export type SystemHealthDto = components['schemas']['SystemHealthResponse'];
+export type ProductDto = components['schemas']['ProductResponse'];
+export type ProductSummaryDto = components['schemas']['ProductSummaryResponse'];
+export type PagedProductsDto = components['schemas']['PagedProductsResponse'];
+export type CreateProductDto = components['schemas']['CreateProductRequest'];
+export type UpdateProductDto = components['schemas']['UpdateProductRequest'];
+export type UpsertVariantDto = components['schemas']['UpsertVariantRequest'];
+export type AdjustInventoryDto = components['schemas']['AdjustInventoryRequest'];
+export type InventoryDto = components['schemas']['InventoryResponse'];
+export type TaxonomyItemDto = components['schemas']['TaxonomyItemResponse'];
+export type CreateTaxonomyItemDto = components['schemas']['CreateTaxonomyItemRequest'];
 
 export interface SessionDto {
   accessToken: components['schemas']['AuthResponse']['accessToken'];

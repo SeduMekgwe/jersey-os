@@ -4,7 +4,7 @@ Jersey OS is the operational platform for Jersey No.10 Collective. The foundatio
 
 ## Status
 
-The platform foundation is being established. Architectural decisions and operating expectations are authoritative in [`docs/`](docs/README.md).
+Platform foundation and product catalog core are in place. Architectural decisions and operating expectations are authoritative in [`docs/`](docs/README.md).
 
 ## Principles
 

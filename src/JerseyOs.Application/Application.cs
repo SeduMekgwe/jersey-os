@@ -13,14 +13,6 @@ public interface ICurrentRequest
     string CorrelationId { get; }
 }
 
-public interface IApplicationDbContext
-{
-    IQueryable<Organization> Organizations { get; }
-    IQueryable<RefreshTokenSession> RefreshTokenSessions { get; }
-    IQueryable<OutboxMessage> OutboxMessages { get; }
-    Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
-}
-
 public sealed record IssuedAuth(AuthResponse Response, string RefreshToken, DateTimeOffset RefreshExpiresAtUtc);
 
 public interface IIdentityService

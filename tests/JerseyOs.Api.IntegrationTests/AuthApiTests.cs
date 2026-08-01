@@ -199,6 +199,116 @@ public sealed class AuthApiTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task CatalogWriteDeniedWithoutPermission()
+    {
+        if (!EnsureDockerOrSkip())
+        {
+            return;
+        }
+
+        await using var scope = _factory!.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<JerseyOsDbContext>();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var orgId = Guid.Parse("0190f2f2-67a1-7b11-a9e8-5f4921816f53");
+        var reader = new ApplicationUser
+        {
+            UserName = "catalog-reader@example.invalid",
+            Email = "catalog-reader@example.invalid",
+            EmailConfirmed = true,
+            IsActive = true
+        };
+        Assert.True((await users.CreateAsync(reader, "Str0ng!Passw0rd#1")).Succeeded);
+        var membership = new OrganizationMembership { OrganizationId = orgId, UserId = reader.Id };
+        db.OrganizationMemberships.Add(membership);
+        var role = new ApplicationRole { OrganizationId = orgId, Name = "CatalogReader", NormalizedName = "CATALOGREADER" };
+        db.Roles.Add(role);
+        await db.SaveChangesAsync();
+        db.MembershipRoles.Add(new MembershipRole
+        {
+            OrganizationId = orgId,
+            MembershipId = membership.Id,
+            RoleId = role.Id
+        });
+        var readPermission = await db.PermissionsSet.SingleAsync(x => x.Key == Permissions.CatalogRead);
+        db.RolePermissions.Add(new RolePermissionGrant
+        {
+            OrganizationId = orgId,
+            RoleId = role.Id,
+            PermissionId = readPermission.Id
+        });
+        await db.SaveChangesAsync();
+
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = true });
+        var login = await client.PostAsJsonAsync(
+            "/api/v1/auth/login",
+            new LoginRequest("catalog-reader@example.invalid", "Str0ng!Passw0rd#1"));
+        Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+        var auth = await login.Content.ReadFromJsonAsync<AuthResponse>();
+        Assert.NotNull(auth);
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", auth.AccessToken);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/v1/catalog/products")).StatusCode);
+        Assert.Equal(
+            HttpStatusCode.Forbidden,
+            (await client.PostAsJsonAsync(
+                "/api/v1/catalog/products",
+                new CreateProductRequest("Denied", "denied", null, null, null, null, null))).StatusCode);
+    }
+
+    [Fact]
+    public async Task AdminCanCreateProductVariantAndAdjustInventory()
+    {
+        if (!EnsureDockerOrSkip())
+        {
+            return;
+        }
+
+        var client = _factory!.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = true });
+        var login = await client.PostAsJsonAsync(
+            "/api/v1/auth/login",
+            new LoginRequest("admin@example.invalid", "Str0ng!Passw0rd#1"));
+        var auth = await login.Content.ReadFromJsonAsync<AuthResponse>();
+        Assert.NotNull(auth);
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", auth.AccessToken);
+
+        var team = await (await client.PostAsJsonAsync(
+            "/api/v1/catalog/teams",
+            new CreateTaxonomyItemRequest("Arsenal", "arsenal"))).Content.ReadFromJsonAsync<TaxonomyItemResponse>();
+        var season = await (await client.PostAsJsonAsync(
+            "/api/v1/catalog/seasons",
+            new CreateTaxonomyItemRequest("2025/26", "2025-26"))).Content.ReadFromJsonAsync<TaxonomyItemResponse>();
+        Assert.NotNull(team);
+        Assert.NotNull(season);
+
+        var create = await client.PostAsJsonAsync(
+            "/api/v1/catalog/products",
+            new CreateProductRequest("Home 25", "home-25", "H25", team.Id, season.Id, null, null));
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        var product = await create.Content.ReadFromJsonAsync<ProductResponse>();
+        Assert.NotNull(product);
+
+        var withVariant = await client.PutAsJsonAsync(
+            $"/api/v1/catalog/products/{product.Id}/variants",
+            new UpsertVariantRequest(null, "HOME25-M", "M", 0));
+        Assert.Equal(HttpStatusCode.OK, withVariant.StatusCode);
+        product = await withVariant.Content.ReadFromJsonAsync<ProductResponse>();
+        Assert.NotNull(product);
+        var variant = Assert.Single(product.Variants);
+
+        var activated = await client.PostAsync($"/api/v1/catalog/products/{product.Id}/activate", null);
+        Assert.Equal(HttpStatusCode.OK, activated.StatusCode);
+
+        var adjusted = await client.PostAsJsonAsync(
+            $"/api/v1/inventory/variants/{variant.Id}/adjust",
+            new AdjustInventoryRequest(5, "initial stock", null));
+        Assert.Equal(HttpStatusCode.OK, adjusted.StatusCode);
+        var inventory = await adjusted.Content.ReadFromJsonAsync<InventoryResponse>();
+        Assert.NotNull(inventory);
+        Assert.Equal(5, inventory.OnHand);
+    }
+
+    [Fact]
     public async Task OpenApiDocumentIsAvailable()
     {
         if (!EnsureDockerOrSkip())

@@ -89,3 +89,20 @@ erDiagram
 ```
 
 The diagram is a conceptual foundation, not a substitute for migrations. Identity provider tables may use provider-required shapes while preserving these ownership and security rules.
+
+## Catalog model
+
+Tables are prefixed `catalog_` and organization-filtered.
+
+```mermaid
+erDiagram
+  PRODUCT ||--o{ PRODUCT_VARIANT : has
+  PRODUCT ||--o{ PRODUCT_IMAGE : has
+  PRODUCT }o--o| TEAM : classified_by
+  PRODUCT }o--o| SEASON : belongs_to
+  PRODUCT }o--o{ CATEGORY : in
+  PRODUCT }o--o{ TAG : tagged
+  PRODUCT_VARIANT ||--|| INVENTORY_LEVEL : tracks
+```
+
+Unique constraints include `(organization_id, slug)` on products and taxonomy, and `(organization_id, sku)` on variants. Inventory concurrency uses a SQL Server `rowversion` token.

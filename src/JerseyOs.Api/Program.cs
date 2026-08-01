@@ -9,6 +9,8 @@ using MediatR;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Options;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
@@ -92,6 +94,17 @@ app.UseSerilogRequestLogging(options =>
 });
 app.UseHttpsRedirection();
 app.UseCors("api");
+var objectStorage = app.Services.GetRequiredService<IOptions<ObjectStorageOptions>>().Value;
+var mediaRoot = Path.GetFullPath(
+    Path.IsPathRooted(objectStorage.LocalRootPath)
+        ? objectStorage.LocalRootPath
+        : Path.Combine(app.Environment.ContentRootPath, objectStorage.LocalRootPath));
+Directory.CreateDirectory(mediaRoot);
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(mediaRoot),
+    RequestPath = objectStorage.PublicBasePath.TrimEnd('/')
+});
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();

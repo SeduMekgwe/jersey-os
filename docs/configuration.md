@@ -19,6 +19,12 @@ Configuration is loaded from `appsettings*.json`, environment variables, and an 
 | `OpenTelemetry__OtlpEndpoint` | OTLP collector endpoint | Sometimes | Hosted |
 | `Cors__AllowedOrigins` | Exact trusted web origins | No | Hosted |
 | `DataProtection__KeyStore` | Shared encrypted key-ring location | Sensitive | Hosted |
+| `ObjectStorage__Provider` | Storage adapter (`Local` today) | No | All |
+| `ObjectStorage__LocalRootPath` | Local filesystem root for media | No | Local |
+| `ObjectStorage__PublicBasePath` | Public URL prefix for media (`/media`) | No | Local |
+| `Database__ConnectionString` | SQL Server connection | Yes | All |
+| `Database__DefaultOrganizationId` | Default org for single-tenant-ready mode | No | All |
+| `Jwt__SigningKey` | HMAC signing material (min 32 bytes) | Yes | All |
 
 ## Rules
 

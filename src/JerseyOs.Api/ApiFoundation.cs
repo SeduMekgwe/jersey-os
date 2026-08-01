@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 namespace JerseyOs.Api;
@@ -33,6 +34,14 @@ public sealed class ApiExceptionHandler(IProblemDetailsService problemDetails) :
                 StatusCodes.Status400BadRequest,
                 "Validation failed",
                 string.Join("; ", validation.Errors.Select(x => x.ErrorMessage))),
+            InvalidOperationException invalid => (
+                StatusCodes.Status400BadRequest,
+                "Request rejected",
+                invalid.Message),
+            DbUpdateConcurrencyException => (
+                StatusCodes.Status409Conflict,
+                "Conflict",
+                "The resource was modified by another request."),
             _ => (StatusCodes.Status500InternalServerError, "An unexpected error occurred", (string?)null)
         };
         httpContext.Response.StatusCode = status;

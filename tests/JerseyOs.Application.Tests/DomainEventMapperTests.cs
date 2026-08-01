@@ -19,4 +19,16 @@ public sealed class DomainEventMapperTests
         Assert.Equal("corr-1", typed.CorrelationId);
         Assert.Same(created, typed.DomainEvent);
     }
+
+    [Fact]
+    public void MapsProductCreatedToNotification()
+    {
+        var orgId = Guid.NewGuid();
+        var productId = Guid.NewGuid();
+        var created = new ProductCreated(productId, orgId, DateTimeOffset.UtcNow);
+
+        var notification = Assert.IsType<ProductCreatedNotification>(
+            Assert.Single(DomainEventMapper.ToNotifications([created], orgId, "corr-2")));
+        Assert.Equal(productId, notification.DomainEvent.ProductId);
+    }
 }

@@ -1,11 +1,12 @@
 # Jersey OS documentation
 
-## Foundation
+## Foundation and catalog
 
 - [Architecture overview](architecture.md)
 - [Module boundaries](module-boundaries.md)
-- [Database conventions and foundation ERD](database.md)
+- [Database conventions and ERD](database.md)
 - [API conventions](api.md)
+- [OpenAPI contract](api/openapi.yaml)
 - [Configuration catalog](configuration.md)
 - [Security assumptions and threat model](security.md)
 - [Testing guide](testing.md)

@@ -11,4 +11,5 @@ ADRs are immutable decision history. Supersede an accepted ADR with a new ADR; d
 - [0007 — OpenAPI-generated TypeScript client](0007-openapi-typescript-client.md)
 - [0008 — Platform observability](0008-observability.md)
 - [0009 — Proprietary licensing](0009-proprietary-licensing.md)
+- [0010 — Catalog module and local object storage](0010-catalog-object-storage.md)
 - [Template](template.md)

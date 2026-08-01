@@ -45,7 +45,18 @@ public static class Permissions
     public const string PlatformRead = "platform.read";
     public const string PlatformAdmin = "platform.admin";
     public const string SystemHealthRead = "system.health.read";
-    public static readonly string[] All = [PlatformRead, PlatformAdmin, SystemHealthRead];
+    public const string CatalogRead = "catalog.read";
+    public const string CatalogWrite = "catalog.write";
+    public const string InventoryAdjust = "inventory.adjust";
+    public static readonly string[] All =
+    [
+        PlatformRead,
+        PlatformAdmin,
+        SystemHealthRead,
+        CatalogRead,
+        CatalogWrite,
+        InventoryAdjust
+    ];
 }
 
 public sealed class JerseyOsDbContext(
@@ -68,10 +79,31 @@ public sealed class JerseyOsDbContext(
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<OutboxMessage> OutboxMessagesSet => Set<OutboxMessage>();
     public DbSet<FeatureFlag> FeatureFlags => Set<FeatureFlag>();
+    public DbSet<Product> ProductsSet => Set<Product>();
+    public DbSet<ProductVariant> ProductVariantsSet => Set<ProductVariant>();
+    public DbSet<InventoryLevel> InventoryLevelsSet => Set<InventoryLevel>();
+    public DbSet<Team> TeamsSet => Set<Team>();
+    public DbSet<Season> SeasonsSet => Set<Season>();
+    public DbSet<Category> CategoriesSet => Set<Category>();
+    public DbSet<Tag> TagsSet => Set<Tag>();
+    public DbSet<ProductImage> ProductImagesSet => Set<ProductImage>();
+    public DbSet<ProductCategory> ProductCategoriesSet => Set<ProductCategory>();
+    public DbSet<ProductTag> ProductTagsSet => Set<ProductTag>();
 
     IQueryable<Organization> IApplicationDbContext.Organizations => OrganizationsSet;
     IQueryable<RefreshTokenSession> IApplicationDbContext.RefreshTokenSessions => RefreshTokenSessionsSet;
     IQueryable<OutboxMessage> IApplicationDbContext.OutboxMessages => OutboxMessagesSet;
+    IQueryable<Product> IApplicationDbContext.Products => ProductsSet;
+    IQueryable<ProductVariant> IApplicationDbContext.ProductVariants => ProductVariantsSet;
+    IQueryable<InventoryLevel> IApplicationDbContext.InventoryLevels => InventoryLevelsSet;
+    IQueryable<Team> IApplicationDbContext.Teams => TeamsSet;
+    IQueryable<Season> IApplicationDbContext.Seasons => SeasonsSet;
+    IQueryable<Category> IApplicationDbContext.Categories => CategoriesSet;
+    IQueryable<Tag> IApplicationDbContext.Tags => TagsSet;
+    IQueryable<AuditLog> IApplicationDbContext.AuditLogs => AuditLogs;
+
+    void IApplicationDbContext.Add<TEntity>(TEntity entity) => Set<TEntity>().Add(entity);
+    void IApplicationDbContext.Remove<TEntity>(TEntity entity) => Set<TEntity>().Remove(entity);
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -149,6 +181,7 @@ public sealed class JerseyOsDbContext(
             b.HasIndex(x => new { x.OrganizationId, x.Key }).IsUnique();
             b.HasQueryFilter(x => !x.IsDeleted && x.OrganizationId == EffectiveOrganizationId);
         });
+        builder.ConfigureCatalog(EffectiveOrganizationId);
 
         foreach (var entityType in builder.Model.GetEntityTypes()
                      .Where(t => typeof(IAuditableEntity).IsAssignableFrom(t.ClrType)))
@@ -427,6 +460,7 @@ public static class DependencyInjection
         var redisConnection = configuration["Redis:ConnectionString"] ?? "localhost:6379,abortConnect=false";
         services.AddScoped<OutboxIntegrationEventPublisher>();
         services.AddScoped<IIntegrationEventPublisher>(sp => sp.GetRequiredService<OutboxIntegrationEventPublisher>());
+        services.AddObjectStorage(configuration);
         services.AddDbContext<JerseyOsDbContext>(o => o.UseSqlServer(connectionString));
         services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<JerseyOsDbContext>());
         services.AddIdentityCore<ApplicationUser>(o =>
@@ -475,7 +509,10 @@ public static class DependencyInjection
             services.AddAuthorizationBuilder()
                 .AddPolicy(Permissions.PlatformRead, p => p.RequireClaim("permission", Permissions.PlatformRead))
                 .AddPolicy(Permissions.PlatformAdmin, p => p.RequireClaim("permission", Permissions.PlatformAdmin))
-                .AddPolicy(Permissions.SystemHealthRead, p => p.RequireClaim("permission", Permissions.SystemHealthRead));
+                .AddPolicy(Permissions.SystemHealthRead, p => p.RequireClaim("permission", Permissions.SystemHealthRead))
+                .AddPolicy(Permissions.CatalogRead, p => p.RequireClaim("permission", Permissions.CatalogRead))
+                .AddPolicy(Permissions.CatalogWrite, p => p.RequireClaim("permission", Permissions.CatalogWrite))
+                .AddPolicy(Permissions.InventoryAdjust, p => p.RequireClaim("permission", Permissions.InventoryAdjust));
         }
         return services;
     }
