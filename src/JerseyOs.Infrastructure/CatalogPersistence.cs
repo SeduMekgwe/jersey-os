@@ -139,6 +139,7 @@ public static class CatalogModelBuilder
             b.ToTable("catalog_product_variants");
             b.Property(x => x.Sku).HasMaxLength(64).IsRequired();
             b.Property(x => x.Size).HasMaxLength(32).IsRequired();
+            b.Property(x => x.PriceAmount).HasPrecision(18, 2);
             b.HasIndex(x => new { x.OrganizationId, x.Sku }).IsUnique();
             b.HasOne(x => x.Inventory).WithOne(x => x.Variant)
                 .HasForeignKey<InventoryLevel>(x => x.VariantId)

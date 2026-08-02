@@ -8,19 +8,33 @@ public sealed record OrganizationCreated(Guid OrganizationId, DateTimeOffset Occ
 public sealed class Organization : SoftDeletableEntity
 {
     private Organization() { }
-    public Organization(string name, string slug, DateTimeOffset now, Guid? id = null)
+    public Organization(string name, string slug, DateTimeOffset now, Guid? id = null, string defaultCurrency = "ZAR")
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentException.ThrowIfNullOrWhiteSpace(slug);
         Name = name.Trim();
         Slug = slug.Trim().ToLowerInvariant();
+        SetDefaultCurrency(defaultCurrency);
         if (id is { } organizationId) Id = organizationId;
         Raise(new OrganizationCreated(Id, now));
     }
 
     public string Name { get; private set; } = string.Empty;
     public string Slug { get; private set; } = string.Empty;
+    public string DefaultCurrency { get; private set; } = "ZAR";
     public ICollection<OrganizationMembership> Memberships { get; } = [];
+
+    public void SetDefaultCurrency(string currency)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(currency);
+        var normalized = currency.Trim().ToUpperInvariant();
+        if (normalized.Length != 3 || !normalized.All(char.IsLetter))
+        {
+            throw new ArgumentException("Currency must be a 3-letter ISO 4217 code.", nameof(currency));
+        }
+
+        DefaultCurrency = normalized;
+    }
 }
 
 public sealed class ApplicationUser : IdentityUser<Guid>, IAuditableEntity

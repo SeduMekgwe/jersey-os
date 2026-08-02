@@ -32,6 +32,7 @@ export function ProductDetailPage() {
   const [seasonId, setSeasonId] = useState('');
   const [sku, setSku] = useState('');
   const [size, setSize] = useState('M');
+  const [priceAmount, setPriceAmount] = useState('');
   const [delta, setDelta] = useState('1');
   const [reason, setReason] = useState('manual adjust');
   const [error, setError] = useState<string | null>(null);
@@ -117,6 +118,7 @@ export function ProductDetailPage() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['catalog', 'product', productId] });
       setSku('');
+      setPriceAmount('');
     },
     onError: (err: Error) => {
       setError(err.message);
@@ -347,6 +349,9 @@ export function ProductDetailPage() {
                 <div>
                   <p className="font-medium">
                     {variant.sku} · {variant.size}
+                    {variant.priceAmount != null
+                      ? ` · ${String(variant.priceAmount)} ${product.currency}`
+                      : ' · no price'}
                   </p>
                   <p className="text-sm text-muted-foreground">
                     On hand {variant.inventory.onHand} · Reserved {variant.inventory.reserved}
@@ -374,7 +379,7 @@ export function ProductDetailPage() {
               </div>
             ))}
             {canWrite && (
-              <div className="grid gap-3 md:grid-cols-3">
+              <div className="grid gap-3 md:grid-cols-4">
                 <Input
                   placeholder="SKU"
                   value={sku}
@@ -389,10 +394,29 @@ export function ProductDetailPage() {
                     setSize(e.target.value);
                   }}
                 />
+                <Input
+                  placeholder={`Price (${product.currency})`}
+                  value={priceAmount}
+                  inputMode="decimal"
+                  onChange={(e) => {
+                    setPriceAmount(e.target.value);
+                  }}
+                />
                 <Button
                   onClick={() => {
                     setError(null);
-                    variantMutation.mutate({ sku, size, sortOrder: product.variants.length });
+                    const parsed =
+                      priceAmount.trim() === '' ? null : Number(priceAmount);
+                    if (parsed !== null && (Number.isNaN(parsed) || parsed < 0)) {
+                      setError('Price must be a non-negative number.');
+                      return;
+                    }
+                    variantMutation.mutate({
+                      sku,
+                      size,
+                      sortOrder: product.variants.length,
+                      priceAmount: parsed,
+                    });
                   }}
                 >
                   Add variant

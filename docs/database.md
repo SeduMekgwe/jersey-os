@@ -105,7 +105,7 @@ erDiagram
   PRODUCT_VARIANT ||--|| INVENTORY_LEVEL : tracks
 ```
 
-Unique constraints include `(organization_id, slug)` on products and taxonomy, and `(organization_id, sku)` on variants. Inventory concurrency uses a SQL Server `rowversion` token.
+Unique constraints include `(organization_id, slug)` on products and taxonomy, and `(organization_id, sku)` on variants. Inventory concurrency uses a SQL Server `rowversion` token. Variant unit price is `price_amount` (`decimal(18,2)`, nullable); organization `DefaultCurrency` supplies the ISO 4217 code for catalog and publish.
 
 ## Import model
 

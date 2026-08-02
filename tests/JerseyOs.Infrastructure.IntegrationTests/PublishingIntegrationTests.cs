@@ -60,7 +60,7 @@ public sealed class PublishingIntegrationTests : IAsyncLifetime
         db.SeasonsSet.Add(season);
         var now = DateTimeOffset.UtcNow;
         var product = new Product(orgId, "Home Kit", "home-kit", "H25", team.Id, season.Id, now);
-        product.UpsertVariant(null, "HOME-M", "M", 0, now);
+        product.UpsertVariant(null, "HOME-M", "M", 0, now, 1299.00m);
         product.Activate(now);
         db.ProductsSet.Add(product);
         await db.SaveChangesAsync();

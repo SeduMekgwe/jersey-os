@@ -33,13 +33,14 @@ public interface IApplicationDbContext
 
 public static class CatalogMapping
 {
-    public static ProductResponse ToResponse(Product product, IObjectStorage storage) =>
+    public static ProductResponse ToResponse(Product product, IObjectStorage storage, string currency) =>
         new(
             product.Id,
             product.Name,
             product.Slug,
             product.StyleCode,
             product.Status.ToString(),
+            currency,
             product.TeamId,
             product.SeasonId,
             product.Categories.Select(x => x.CategoryId).ToArray(),
@@ -51,6 +52,7 @@ public static class CatalogMapping
                     v.Sku,
                     v.Size,
                     v.SortOrder,
+                    v.PriceAmount,
                     new InventoryResponse(
                         v.Inventory.VariantId,
                         v.Inventory.OnHand,
@@ -78,6 +80,13 @@ public static class CatalogMapping
             product.TeamId,
             product.SeasonId,
             product.Variants.Count);
+
+    public static async Task<ProductResponse> ToResponseAsync(
+        Product product, IObjectStorage storage, IApplicationDbContext db, CancellationToken cancellationToken)
+    {
+        var currency = await CatalogHandlerSupport.GetCurrencyAsync(db, cancellationToken).ConfigureAwait(false);
+        return ToResponse(product, storage, currency);
+    }
 }
 
 public sealed record CreateProductCommand(
@@ -115,7 +124,8 @@ public sealed record UpsertVariantCommand(
     Guid? VariantId,
     string Sku,
     string Size,
-    int SortOrder) : IRequest<ProductResponse?>;
+    int SortOrder,
+    decimal? PriceAmount) : IRequest<ProductResponse?>;
 
 public sealed record RemoveVariantCommand(Guid ProductId, Guid VariantId) : IRequest<ProductResponse?>;
 public sealed record AdjustInventoryCommand(
@@ -179,6 +189,7 @@ public sealed class UpsertVariantValidator : AbstractValidator<UpsertVariantComm
         RuleFor(x => x.ProductId).NotEmpty();
         RuleFor(x => x.Sku).NotEmpty().MaximumLength(64);
         RuleFor(x => x.Size).NotEmpty().MaximumLength(32);
+        RuleFor(x => x.PriceAmount).GreaterThanOrEqualTo(0).When(x => x.PriceAmount is not null);
     }
 }
 
@@ -225,7 +236,7 @@ public sealed class CreateProductHandler(
 
         db.Add(product);
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        return CatalogMapping.ToResponse(product, storage);
+        return await CatalogMapping.ToResponseAsync(product, storage, db, cancellationToken).ConfigureAwait(false);
     }
 }
 
@@ -255,7 +266,7 @@ public sealed class UpdateProductHandler(
         product.SetCategories(request.CategoryIds ?? [], time.GetUtcNow());
         product.SetTags(request.TagIds ?? [], time.GetUtcNow());
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        return CatalogMapping.ToResponse(product, storage);
+        return await CatalogMapping.ToResponseAsync(product, storage, db, cancellationToken).ConfigureAwait(false);
     }
 }
 
@@ -274,7 +285,7 @@ public sealed class ActivateProductHandler(
 
         product.Activate(time.GetUtcNow());
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        return CatalogMapping.ToResponse(product, storage);
+        return await CatalogMapping.ToResponseAsync(product, storage, db, cancellationToken).ConfigureAwait(false);
     }
 }
 
@@ -293,7 +304,7 @@ public sealed class ArchiveProductHandler(
 
         product.Archive(time.GetUtcNow());
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        return CatalogMapping.ToResponse(product, storage);
+        return await CatalogMapping.ToResponseAsync(product, storage, db, cancellationToken).ConfigureAwait(false);
     }
 }
 
@@ -303,7 +314,9 @@ public sealed class GetProductHandler(IApplicationDbContext db, IObjectStorage s
     public async Task<ProductResponse?> Handle(GetProductQuery request, CancellationToken cancellationToken)
     {
         var product = await CatalogHandlerSupport.LoadProduct(db, request.ProductId, cancellationToken).ConfigureAwait(false);
-        return product is null ? null : CatalogMapping.ToResponse(product, storage);
+        return product is null
+            ? null
+            : await CatalogMapping.ToResponseAsync(product, storage, db, cancellationToken).ConfigureAwait(false);
     }
 }
 
@@ -385,9 +398,15 @@ public sealed class UpsertVariantHandler(
             throw new InvalidOperationException($"SKU '{sku}' is already in use.");
         }
 
-        product.UpsertVariant(request.VariantId, request.Sku, request.Size, request.SortOrder, time.GetUtcNow());
+        product.UpsertVariant(
+            request.VariantId,
+            request.Sku,
+            request.Size,
+            request.SortOrder,
+            time.GetUtcNow(),
+            request.PriceAmount);
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        return CatalogMapping.ToResponse(product, storage);
+        return await CatalogMapping.ToResponseAsync(product, storage, db, cancellationToken).ConfigureAwait(false);
     }
 }
 
@@ -414,7 +433,7 @@ public sealed class RemoveVariantHandler(
         product.RemoveVariant(request.VariantId, time.GetUtcNow());
         db.Remove(variant);
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        return CatalogMapping.ToResponse(product, storage);
+        return await CatalogMapping.ToResponseAsync(product, storage, db, cancellationToken).ConfigureAwait(false);
     }
 }
 
@@ -484,7 +503,7 @@ public sealed class AttachProductImageHandler(
         await storage.PutAsync(key, request.Content, request.ContentType, cancellationToken).ConfigureAwait(false);
         product.AttachImage(key, request.ContentType, request.AltText, request.SortOrder, time.GetUtcNow());
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        return CatalogMapping.ToResponse(product, storage);
+        return await CatalogMapping.ToResponseAsync(product, storage, db, cancellationToken).ConfigureAwait(false);
     }
 }
 
@@ -503,7 +522,7 @@ public sealed class ReorderProductImagesHandler(
 
         product.ReorderImages(request.Items.ToDictionary(x => x.ImageId, x => x.SortOrder), time.GetUtcNow());
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        return CatalogMapping.ToResponse(product, storage);
+        return await CatalogMapping.ToResponseAsync(product, storage, db, cancellationToken).ConfigureAwait(false);
     }
 }
 
@@ -524,7 +543,7 @@ public sealed class RemoveProductImageHandler(
         db.Remove(image);
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         await storage.DeleteAsync(image.ObjectKey, cancellationToken).ConfigureAwait(false);
-        return CatalogMapping.ToResponse(product, storage);
+        return await CatalogMapping.ToResponseAsync(product, storage, db, cancellationToken).ConfigureAwait(false);
     }
 }
 
@@ -686,6 +705,15 @@ internal static class CatalogHandlerSupport
 {
     public static Guid RequireOrganization(ICurrentRequest current) =>
         current.OrganizationId ?? throw new InvalidOperationException("Organization context is required.");
+
+    public static async Task<string> GetCurrencyAsync(IApplicationDbContext db, CancellationToken cancellationToken)
+    {
+        var currency = await db.Organizations.AsNoTracking()
+            .Select(x => x.DefaultCurrency)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return string.IsNullOrWhiteSpace(currency) ? "ZAR" : currency;
+    }
 
     public static Task<Product?> LoadProduct(IApplicationDbContext db, Guid productId, CancellationToken cancellationToken) =>
         db.Products

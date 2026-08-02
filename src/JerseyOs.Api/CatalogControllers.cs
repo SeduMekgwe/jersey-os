@@ -104,7 +104,7 @@ public sealed class CatalogController(ISender sender) : ControllerBase
         Guid productId, UpsertVariantRequest request, CancellationToken cancellationToken)
     {
         var product = await sender.Send(
-            new UpsertVariantCommand(productId, request.Id, request.Sku, request.Size, request.SortOrder),
+            new UpsertVariantCommand(productId, request.Id, request.Sku, request.Size, request.SortOrder, request.PriceAmount),
             cancellationToken);
         return product is null ? NotFound() : Ok(product);
     }

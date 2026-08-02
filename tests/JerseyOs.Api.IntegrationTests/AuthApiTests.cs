@@ -405,7 +405,7 @@ public sealed class AuthApiTests : IAsyncLifetime
 
         var withVariant = await client.PutAsJsonAsync(
             $"/api/v1/catalog/products/{product.Id}/variants",
-            new UpsertVariantRequest(null, "HOME25-M", "M", 0));
+            new UpsertVariantRequest(null, "HOME25-M", "M", 0, 999.00m));
         Assert.Equal(HttpStatusCode.OK, withVariant.StatusCode);
         product = await withVariant.Content.ReadFromJsonAsync<ProductResponse>();
         Assert.NotNull(product);

@@ -93,12 +93,21 @@ public sealed class ShopifySalesChannelPublisher(
         if (!string.IsNullOrWhiteSpace(input.TeamName)) tags.Add(input.TeamName!);
         if (!string.IsNullOrWhiteSpace(input.SeasonName)) tags.Add(input.SeasonName!);
 
-        var variants = input.Variants.Select(v => new Dictionary<string, object?>
+        var variants = input.Variants.Select(v =>
         {
-            ["optionValues"] = new[] { new { optionName = "Size", name = v.Size } },
-            ["sku"] = v.Sku,
-            ["inventoryItem"] = new { tracked = true },
-            ["id"] = string.IsNullOrWhiteSpace(v.ExternalVariantId) ? null : v.ExternalVariantId
+            var payload = new Dictionary<string, object?>
+            {
+                ["optionValues"] = new[] { new { optionName = "Size", name = v.Size } },
+                ["sku"] = v.Sku,
+                ["inventoryItem"] = new { tracked = true },
+                ["id"] = string.IsNullOrWhiteSpace(v.ExternalVariantId) ? null : v.ExternalVariantId
+            };
+            if (v.PriceAmount is { } price)
+            {
+                payload["price"] = price.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+            }
+
+            return payload;
         }).ToArray();
 
         var media = input.ImageUrls
@@ -409,6 +418,21 @@ public sealed class PublishProductJob(
                 .ToDictionaryAsync(x => x.LocalId, cancellationToken)
                 .ConfigureAwait(false);
 
+            var currency = await db.OrganizationsSet.IgnoreQueryFilters()
+                .Where(x => x.Id == organizationId)
+                .Select(x => x.DefaultCurrency)
+                .SingleOrDefaultAsync(cancellationToken)
+                .ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(currency))
+            {
+                currency = "ZAR";
+            }
+
+            if (product.Variants.Any(v => v.PriceAmount is null or <= 0))
+            {
+                throw new InvalidOperationException("Active products require a price on every variant before publish.");
+            }
+
             var input = new PublishProductInput(
                 product.Id,
                 product.OrganizationId,
@@ -421,7 +445,14 @@ public sealed class PublishProductJob(
                 {
                     variantMaps.TryGetValue(v.Id, out var map);
                     var available = Math.Max(0, v.Inventory.OnHand - v.Inventory.Reserved);
-                    return new PublishVariantInput(v.Id, v.Sku, v.Size, available, map?.ExternalId);
+                    return new PublishVariantInput(
+                        v.Id,
+                        v.Sku,
+                        v.Size,
+                        available,
+                        v.PriceAmount,
+                        currency,
+                        map?.ExternalId);
                 }).ToArray(),
                 productMap?.ExternalId);
 

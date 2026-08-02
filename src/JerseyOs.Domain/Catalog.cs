@@ -186,6 +186,11 @@ public sealed class Product : AuditableEntity, IOrganizationScoped
             throw new InvalidOperationException("An active product requires team and season.");
         }
 
+        if (_variants.Any(v => v.PriceAmount is null or <= 0))
+        {
+            throw new InvalidOperationException("An active product requires every variant to have a price greater than zero.");
+        }
+
         Status = ProductStatus.Active;
         Raise(new ProductActivated(Id, OrganizationId, now));
     }
@@ -201,7 +206,13 @@ public sealed class Product : AuditableEntity, IOrganizationScoped
         Raise(new ProductArchived(Id, OrganizationId, now));
     }
 
-    public ProductVariant UpsertVariant(Guid? variantId, string sku, string size, int sortOrder, DateTimeOffset now)
+    public ProductVariant UpsertVariant(
+        Guid? variantId,
+        string sku,
+        string size,
+        int sortOrder,
+        DateTimeOffset now,
+        decimal? priceAmount = null)
     {
         EnsureNotArchived();
         ArgumentException.ThrowIfNullOrWhiteSpace(sku);
@@ -220,6 +231,16 @@ public sealed class Product : AuditableEntity, IOrganizationScoped
         {
             variant = new ProductVariant(OrganizationId, Id, normalizedSku, normalizedSize, sortOrder);
             _variants.Add(variant);
+        }
+
+        if (priceAmount is not null)
+        {
+            variant.SetPrice(priceAmount);
+        }
+
+        if (Status == ProductStatus.Active && variant.PriceAmount is null or <= 0)
+        {
+            throw new InvalidOperationException("Active product variants must keep a price greater than zero.");
         }
 
         Raise(new ProductUpdated(Id, OrganizationId, now));
@@ -336,6 +357,7 @@ public sealed class ProductVariant : AuditableEntity, IOrganizationScoped
     public string Sku { get; private set; } = string.Empty;
     public string Size { get; private set; } = string.Empty;
     public int SortOrder { get; private set; }
+    public decimal? PriceAmount { get; private set; }
     public Product Product { get; private set; } = null!;
     public InventoryLevel Inventory { get; private set; } = null!;
 
@@ -344,6 +366,16 @@ public sealed class ProductVariant : AuditableEntity, IOrganizationScoped
         Sku = sku;
         Size = size;
         SortOrder = sortOrder;
+    }
+
+    public void SetPrice(decimal? priceAmount)
+    {
+        if (priceAmount is < 0)
+        {
+            throw new InvalidOperationException("Price cannot be negative.");
+        }
+
+        PriceAmount = priceAmount;
     }
 }
 

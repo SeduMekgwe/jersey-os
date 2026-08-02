@@ -19,6 +19,7 @@ public sealed record SupplierCatalogRow(
     string? Team,
     string? Season,
     int? Quantity,
+    decimal? PriceAmount,
     string? ImageUrl,
     IReadOnlyDictionary<string, string> Raw);
 
@@ -394,7 +395,8 @@ public static class ImportApply
                 .Include(x => x.Tags)
                 .SingleAsync(x => x.Id == productId, cancellationToken);
             product.UpdateDetails(item.Name, item.Slug, item.StyleCode, teamId, seasonId, now);
-            variant = product.UpsertVariant(item.MatchedVariantId, item.Sku, item.Size, 0, now);
+            variant = product.UpsertVariant(
+                item.MatchedVariantId, item.Sku, item.Size, 0, now, ReadPriceAmount(item.RawJson));
         }
         else
         {
@@ -427,7 +429,8 @@ public static class ImportApply
                 product.UpdateDetails(item.Name, item.Slug, item.StyleCode, teamId, seasonId, now);
             }
 
-            variant = product.UpsertVariant(null, item.Sku, item.Size, product.Variants.Count, now);
+            variant = product.UpsertVariant(
+                null, item.Sku, item.Size, product.Variants.Count, now, ReadPriceAmount(item.RawJson));
         }
 
         if (item.Quantity is > 0)
@@ -446,6 +449,44 @@ public static class ImportApply
 
         item.MarkApplied(product.Id, variant.Id);
         item.Batch.RefreshCompletion();
+    }
+
+    private static decimal? ReadPriceAmount(string rawJson)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(rawJson);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            foreach (var name in new[] { "price", "price_amount", "Price", "PriceAmount" })
+            {
+                if (!document.RootElement.TryGetProperty(name, out var value))
+                {
+                    continue;
+                }
+
+                if (value.ValueKind == JsonValueKind.Number && value.TryGetDecimal(out var number) && number >= 0)
+                {
+                    return number;
+                }
+
+                if (value.ValueKind == JsonValueKind.String &&
+                    decimal.TryParse(value.GetString(), NumberStyles.Number, CultureInfo.InvariantCulture, out var parsed) &&
+                    parsed >= 0)
+                {
+                    return parsed;
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            // Ignore malformed import payload; price stays unset.
+        }
+
+        return null;
     }
 
     private static async Task<Guid?> EnsureTeamAsync(
@@ -560,6 +601,15 @@ public sealed class CsvSupplierCatalogFeed : ISupplierCatalogFeed
                 qty = parsed;
             }
 
+            var priceRaw = Get(map, "price") ?? Get(map, "price_amount");
+            decimal? price = null;
+            if (!string.IsNullOrWhiteSpace(priceRaw) &&
+                decimal.TryParse(priceRaw, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsedPrice) &&
+                parsedPrice >= 0)
+            {
+                price = parsedPrice;
+            }
+
             rows.Add(new SupplierCatalogRow(
                 Get(map, "style_code") ?? string.Empty,
                 Get(map, "name") ?? string.Empty,
@@ -568,6 +618,7 @@ public sealed class CsvSupplierCatalogFeed : ISupplierCatalogFeed
                 Get(map, "team"),
                 Get(map, "season"),
                 qty,
+                price,
                 Get(map, "image_url") ?? Get(map, "imageurl"),
                 map));
         }

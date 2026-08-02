@@ -137,6 +137,7 @@ public sealed class JerseyOsDbContext(
             b.ToTable("Organizations");
             b.Property(x => x.Name).HasMaxLength(200).IsRequired();
             b.Property(x => x.Slug).HasMaxLength(100).IsRequired();
+            b.Property(x => x.DefaultCurrency).HasMaxLength(3).IsRequired();
             b.HasIndex(x => x.Slug).IsUnique();
             b.HasQueryFilter(x => !x.IsDeleted && x.Id == EffectiveOrganizationId);
         });

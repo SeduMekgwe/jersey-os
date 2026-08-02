@@ -10,6 +10,7 @@ public sealed record ProductVariantResponse(
     string Sku,
     string Size,
     int SortOrder,
+    decimal? PriceAmount,
     InventoryResponse Inventory);
 public sealed record ProductImageResponse(
     Guid Id,
@@ -24,6 +25,7 @@ public sealed record ProductResponse(
     string Slug,
     string? StyleCode,
     string Status,
+    string Currency,
     Guid? TeamId,
     Guid? SeasonId,
     IReadOnlyCollection<Guid> CategoryIds,
@@ -61,7 +63,7 @@ public sealed record UpdateProductRequest(
     Guid? SeasonId,
     IReadOnlyCollection<Guid>? CategoryIds,
     IReadOnlyCollection<Guid>? TagIds);
-public sealed record UpsertVariantRequest(Guid? Id, string Sku, string Size, int SortOrder);
+public sealed record UpsertVariantRequest(Guid? Id, string Sku, string Size, int SortOrder, decimal? PriceAmount);
 public sealed record ReorderImagesRequest(IReadOnlyCollection<ImageSortOrder> Items);
 public sealed record ImageSortOrder(Guid ImageId, int SortOrder);
 public sealed record AdjustInventoryRequest(int DeltaOnHand, string Reason, string? ExpectedRowVersion);

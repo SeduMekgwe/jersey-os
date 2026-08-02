@@ -29,9 +29,21 @@ public sealed class ProductTests
         Assert.Throws<InvalidOperationException>(() => product.Activate(now));
 
         product.UpdateDetails("Away Kit", "away-kit", null, Guid.NewGuid(), Guid.NewGuid(), now);
+        Assert.Throws<InvalidOperationException>(() => product.Activate(now));
+
+        product.UpsertVariant(product.Variants.Single().Id, "AWAY-M", "M", 0, now, 899.00m);
         product.Activate(now);
         Assert.Equal(ProductStatus.Active, product.Status);
+        Assert.Equal(899.00m, product.Variants.Single().PriceAmount);
         Assert.Single(product.DomainEvents.OfType<ProductActivated>());
+    }
+
+    [Fact]
+    public void PriceCannotBeNegative()
+    {
+        var product = new Product(Guid.NewGuid(), "Kit", "kit", null, null, null, DateTimeOffset.UtcNow);
+        Assert.Throws<InvalidOperationException>(() =>
+            product.UpsertVariant(null, "KIT-M", "M", 0, DateTimeOffset.UtcNow, -1m));
     }
 
     [Fact]

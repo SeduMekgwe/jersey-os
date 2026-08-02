@@ -5,7 +5,7 @@
 - **Identity:** credentials, sessions, refresh-token families, account lifecycle.
 - **Organizations:** organization identity, membership, invitations, tenant context.
 - **Access:** roles, permissions, assignments, authorization decisions.
-- **Catalog:** products, variants, taxonomy (team/season/category/tag), images, inventory levels.
+- **Catalog:** products, variants (including unit price), taxonomy (team/season/category/tag), images, inventory levels; org default currency.
 - **Import:** suppliers, CSV feed batches, review-queue items, approve-to-draft catalog writes.
 - **Publishing:** sales channels, external ID maps, publish runs, outbound sync to Shopify (and future channels).
 - **Operations:** scheduled work, operational workflows, and their status.

@@ -32,8 +32,12 @@ public static class Bootstrapper
             .SingleOrDefaultAsync(x => x.Id == organizationId, cancellationToken);
         if (organization is null)
         {
-            organization = new Organization(name, slug, now, organizationId);
+            organization = new Organization(name, slug, now, organizationId, "ZAR");
             db.OrganizationsSet.Add(organization);
+        }
+        else if (string.IsNullOrWhiteSpace(organization.DefaultCurrency))
+        {
+            organization.SetDefaultCurrency("ZAR");
         }
         var permissions = new List<PermissionDefinition>();
         foreach (var key in Permissions.All)

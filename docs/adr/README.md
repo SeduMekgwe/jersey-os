@@ -14,4 +14,5 @@ ADRs are immutable decision history. Supersede an accepted ADR with a new ADR; d
 - [0010 — Catalog module and local object storage](0010-catalog-object-storage.md)
 - [0011 — Supplier import and review queue](0011-supplier-import-review-queue.md)
 - [0012 — Publishing module and Shopify sales channel](0012-publishing-shopify.md)
+- [0013 — Catalog variant pricing](0013-catalog-variant-pricing.md)
 - [Template](template.md)

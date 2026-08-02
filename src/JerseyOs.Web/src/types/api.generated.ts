@@ -671,6 +671,8 @@ export interface components {
             sku: string;
             size: string;
             sortOrder: number;
+            /** Format: decimal */
+            priceAmount?: number | null;
             inventory: components["schemas"]["InventoryResponse"];
         };
         ProductImageResponse: {
@@ -689,6 +691,7 @@ export interface components {
             slug: string;
             styleCode?: string | null;
             status: components["schemas"]["ProductStatus"];
+            currency: string;
             /** Format: uuid */
             teamId?: string | null;
             /** Format: uuid */
@@ -745,6 +748,8 @@ export interface components {
             sku: string;
             size: string;
             sortOrder: number;
+            /** Format: decimal */
+            priceAmount?: number | null;
         };
         ImageSortOrder: {
             /** Format: uuid */

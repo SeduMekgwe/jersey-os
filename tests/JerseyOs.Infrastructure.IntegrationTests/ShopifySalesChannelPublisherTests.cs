@@ -47,7 +47,7 @@ public sealed class ShopifySalesChannelPublisherTests
                 "Arsenal",
                 "2025-26",
                 ["https://cdn.example/kit.jpg"],
-                [new PublishVariantInput(variantId, "HOME-M", "M", 3, null)],
+                [new PublishVariantInput(variantId, "HOME-M", "M", 3, 1299.00m, "ZAR", null)],
                 null),
             CancellationToken.None);
 
@@ -56,6 +56,7 @@ public sealed class ShopifySalesChannelPublisherTests
         Assert.Contains("productSet", requestBody, StringComparison.Ordinal);
         Assert.Contains("HOME-M", requestBody, StringComparison.Ordinal);
         Assert.Contains("style_code", requestBody, StringComparison.Ordinal);
+        Assert.Contains("1299.00", requestBody, StringComparison.Ordinal);
     }
 
     [Fact]

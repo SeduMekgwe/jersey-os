@@ -1004,6 +1004,7 @@ components:
         sku: { type: string }
         size: { type: string }
         sortOrder: { type: integer }
+        priceAmount: { type: number, format: decimal, nullable: true }
         inventory:
           $ref: '#/components/schemas/InventoryResponse'
     ProductImageResponse:
@@ -1018,13 +1019,14 @@ components:
         sortOrder: { type: integer }
     ProductResponse:
       type: object
-      required: [id, name, slug, status, categoryIds, tagIds, variants, images]
+      required: [id, name, slug, status, currency, categoryIds, tagIds, variants, images]
       properties:
         id: { type: string, format: uuid }
         name: { type: string }
         slug: { type: string }
         styleCode: { type: string, nullable: true }
         status: { $ref: '#/components/schemas/ProductStatus' }
+        currency: { type: string, minLength: 3, maxLength: 3 }
         teamId: { type: string, format: uuid, nullable: true }
         seasonId: { type: string, format: uuid, nullable: true }
         categoryIds:
@@ -1102,6 +1104,7 @@ components:
         sku: { type: string }
         size: { type: string }
         sortOrder: { type: integer }
+        priceAmount: { type: number, format: decimal, nullable: true }
     ImageSortOrder:
       type: object
       required: [imageId, sortOrder]

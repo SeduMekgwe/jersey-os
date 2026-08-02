@@ -11,6 +11,8 @@ public sealed record PublishVariantInput(
     string Sku,
     string Size,
     int AvailableQuantity,
+    decimal? PriceAmount,
+    string CurrencyCode,
     string? ExternalVariantId);
 
 public sealed record PublishProductInput(
