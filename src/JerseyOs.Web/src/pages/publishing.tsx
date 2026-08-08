@@ -98,6 +98,10 @@ export function PublishingPage() {
 
       <section className="space-y-3">
         <h2 className="text-lg font-medium">Shopify webhook deliveries</h2>
+        <p className="text-sm text-muted-foreground">
+          Inventory topics: orders/create, orders/cancelled, orders/fulfilled, fulfillments/create,
+          refunds/create.
+        </p>
         {(deliveriesQuery.data ?? []).map((delivery) => (
           <Card key={delivery.id} className="space-y-1 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">

@@ -18,4 +18,4 @@ Published available stock is `OnHand − Reserved`, but nothing reserved stock w
 
 ## Consequences
 
-Shopify remains a projection for catalog and a driver only for order-driven inventory movement. Refunds/partials and multi-channel webhooks stay future work.
+Shopify remains a projection for catalog and a driver only for order-driven inventory movement. Refunds/partials are addressed in ADR 0017; multi-channel webhooks stay future work.

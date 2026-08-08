@@ -67,43 +67,66 @@ public sealed class ProcessShopifyWebhookJob(
                 return;
             }
 
-            var action = delivery.Topic switch
+            var topic = delivery.Topic.Trim().ToLowerInvariant();
+            if (topic is "orders/partially_fulfilled")
             {
-                "orders/create" => InventoryWebhookAction.Reserve,
-                "orders/cancelled" => InventoryWebhookAction.Release,
-                "orders/fulfilled" => InventoryWebhookAction.Commit,
-                _ => InventoryWebhookAction.Unsupported
+                // Inventory commits are driven by fulfillments/create (supports partial quantities).
+                delivery.MarkIgnored("Partial fulfillments are applied via fulfillments/create.", now);
+                await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            var movements = topic switch
+            {
+                "orders/create" => ShopifyOrderPayload.ParseOrderLines(
+                        delivery.PayloadJson, ShopifyLineQuantityMode.Ordered)
+                    .Select(l => new InventoryMovement(l.VariantExternalId, l.Quantity, InventoryWebhookAction.Reserve))
+                    .ToList(),
+                "orders/cancelled" => ShopifyOrderPayload.ParseOrderLines(
+                        delivery.PayloadJson, ShopifyLineQuantityMode.FulfillableOrOrdered)
+                    .Select(l => new InventoryMovement(l.VariantExternalId, l.Quantity, InventoryWebhookAction.Release))
+                    .ToList(),
+                "orders/fulfilled" => ShopifyOrderPayload.ParseOrderLines(
+                        delivery.PayloadJson, ShopifyLineQuantityMode.Ordered)
+                    .Select(l => new InventoryMovement(l.VariantExternalId, l.Quantity, InventoryWebhookAction.Commit))
+                    .ToList(),
+                "fulfillments/create" => ShopifyOrderPayload.ParseOrderLines(
+                        delivery.PayloadJson, ShopifyLineQuantityMode.Ordered)
+                    .Select(l => new InventoryMovement(l.VariantExternalId, l.Quantity, InventoryWebhookAction.Commit))
+                    .ToList(),
+                "refunds/create" => ShopifyOrderPayload.ParseRefundMovements(delivery.PayloadJson).ToList(),
+                _ => null
             };
-            if (action == InventoryWebhookAction.Unsupported)
+
+            if (movements is null)
             {
                 delivery.MarkIgnored($"Unsupported topic '{delivery.Topic}'.", now);
                 await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
                 return;
             }
 
-            var lines = ShopifyOrderPayload.ParseLineItems(delivery.PayloadJson);
-            if (lines.Count == 0)
+            if (movements.Count == 0)
             {
-                delivery.MarkIgnored("Order payload contained no line items.", now);
+                delivery.MarkIgnored("Webhook payload contained no inventory movements.", now);
                 await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
                 return;
             }
 
             var errors = new List<string>();
             var applied = 0;
-            foreach (var line in lines)
+            foreach (var movement in movements)
             {
                 var map = await db.ExternalIdMapsSet.IgnoreQueryFilters()
                     .SingleOrDefaultAsync(
                         x => x.OrganizationId == delivery.OrganizationId
                              && x.ChannelId == channel.Id
                              && x.EntityType == PublishEntityTypes.Variant
-                             && x.ExternalId == line.VariantExternalId,
+                             && x.ExternalId == movement.VariantExternalId,
                         cancellationToken)
                     .ConfigureAwait(false);
                 if (map is null)
                 {
-                    errors.Add($"Unmapped variant {line.VariantExternalId}.");
+                    errors.Add($"Unmapped variant {movement.VariantExternalId}.");
                     continue;
                 }
 
@@ -120,24 +143,15 @@ public sealed class ProcessShopifyWebhookJob(
 
                 try
                 {
-                    switch (action)
+                    var units = ApplyMovement(inventory, movement, now);
+                    if (units > 0)
                     {
-                        case InventoryWebhookAction.Reserve:
-                            inventory.Reserve(line.Quantity, "shopify-reserve", now);
-                            break;
-                        case InventoryWebhookAction.Release:
-                            inventory.Release(line.Quantity, "shopify-release", now);
-                            break;
-                        case InventoryWebhookAction.Commit:
-                            inventory.Commit(line.Quantity, "shopify-commit", now);
-                            break;
+                        applied++;
                     }
-
-                    applied++;
                 }
                 catch (Exception exception)
                 {
-                    errors.Add($"{line.VariantExternalId}: {exception.Message}");
+                    errors.Add($"{movement.VariantExternalId}: {exception.Message}");
                 }
             }
 
@@ -163,6 +177,37 @@ public sealed class ProcessShopifyWebhookJob(
             throw;
         }
     }
+
+    private static int ApplyMovement(InventoryLevel inventory, InventoryMovement movement, DateTimeOffset now) =>
+        movement.Action switch
+        {
+            InventoryWebhookAction.Reserve =>
+                ApplyReserve(inventory, movement.Quantity, now),
+            InventoryWebhookAction.Release =>
+                inventory.ReleaseUpTo(movement.Quantity, "shopify-release", now),
+            InventoryWebhookAction.Commit =>
+                inventory.CommitUpTo(movement.Quantity, "shopify-commit", now),
+            InventoryWebhookAction.Restock =>
+                ApplyRestock(inventory, movement.Quantity, now),
+            _ => 0
+        };
+
+    private static int ApplyReserve(InventoryLevel inventory, int quantity, DateTimeOffset now)
+    {
+        inventory.Reserve(quantity, "shopify-reserve", now);
+        return quantity;
+    }
+
+    private static int ApplyRestock(InventoryLevel inventory, int quantity, DateTimeOffset now)
+    {
+        if (quantity <= 0)
+        {
+            return 0;
+        }
+
+        inventory.Adjust(quantity, "shopify-restock", now);
+        return quantity;
+    }
 }
 
 internal enum InventoryWebhookAction
@@ -170,14 +215,26 @@ internal enum InventoryWebhookAction
     Unsupported = 0,
     Reserve = 1,
     Release = 2,
-    Commit = 3
+    Commit = 3,
+    Restock = 4
 }
 
-internal static class ShopifyOrderPayload
+internal sealed record InventoryMovement(
+    string VariantExternalId,
+    int Quantity,
+    InventoryWebhookAction Action);
+
+public enum ShopifyLineQuantityMode
+{
+    Ordered = 0,
+    FulfillableOrOrdered = 1
+}
+
+public static class ShopifyOrderPayload
 {
     public sealed record LineItem(string VariantExternalId, int Quantity);
 
-    public static IReadOnlyList<LineItem> ParseLineItems(string payloadJson)
+    public static IReadOnlyList<LineItem> ParseOrderLines(string payloadJson, ShopifyLineQuantityMode mode)
     {
         using var document = JsonDocument.Parse(payloadJson);
         if (!document.RootElement.TryGetProperty("line_items", out var items) ||
@@ -186,47 +243,75 @@ internal static class ShopifyOrderPayload
             return [];
         }
 
-        var lines = new List<LineItem>();
+        return ParseLineItemArray(items, mode);
+    }
+
+    internal static IReadOnlyList<InventoryMovement> ParseRefundMovements(string payloadJson)
+    {
+        using var document = JsonDocument.Parse(payloadJson);
+        if (!document.RootElement.TryGetProperty("refund_line_items", out var items) ||
+            items.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        var movements = new List<InventoryMovement>();
         foreach (var item in items.EnumerateArray())
         {
-            var quantity = 0;
-            if (item.TryGetProperty("quantity", out var qtyEl))
-            {
-                quantity = qtyEl.ValueKind switch
-                {
-                    JsonValueKind.Number => qtyEl.GetInt32(),
-                    JsonValueKind.String => int.TryParse(qtyEl.GetString(), out var q) ? q : 0,
-                    _ => 0
-                };
-            }
-
+            var quantity = ReadInt(item, "quantity");
             if (quantity <= 0)
             {
                 continue;
             }
 
-            string? externalId = null;
-            if (item.TryGetProperty("admin_graphql_api_id", out var gql) &&
-                gql.ValueKind == JsonValueKind.String &&
-                gql.GetString() is { Length: > 0 } gqlId &&
-                gqlId.Contains("ProductVariant", StringComparison.Ordinal))
+            var restockType = item.TryGetProperty("restock_type", out var restockEl)
+                              && restockEl.ValueKind == JsonValueKind.String
+                ? restockEl.GetString()?.Trim().ToLowerInvariant()
+                : null;
+
+            var action = restockType switch
             {
-                externalId = gqlId;
-            }
-            else if (item.TryGetProperty("variant_id", out var variantIdEl))
+                "cancel" => InventoryWebhookAction.Release,
+                "return" => InventoryWebhookAction.Restock,
+                "no_restock" => InventoryWebhookAction.Unsupported,
+                _ => InventoryWebhookAction.Unsupported
+            };
+            if (action == InventoryWebhookAction.Unsupported)
             {
-                var numeric = variantIdEl.ValueKind switch
-                {
-                    JsonValueKind.Number => variantIdEl.GetInt64().ToString(CultureInfo.InvariantCulture),
-                    JsonValueKind.String => variantIdEl.GetString(),
-                    _ => null
-                };
-                if (!string.IsNullOrWhiteSpace(numeric))
-                {
-                    externalId = $"gid://shopify/ProductVariant/{numeric}";
-                }
+                continue;
             }
 
+            if (!item.TryGetProperty("line_item", out var lineItem) || lineItem.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            var externalId = ReadVariantExternalId(lineItem);
+            if (string.IsNullOrWhiteSpace(externalId))
+            {
+                continue;
+            }
+
+            movements.Add(new InventoryMovement(externalId, quantity, action));
+        }
+
+        return movements;
+    }
+
+    private static List<LineItem> ParseLineItemArray(JsonElement items, ShopifyLineQuantityMode mode)
+    {
+        var lines = new List<LineItem>();
+        foreach (var item in items.EnumerateArray())
+        {
+            var quantity = mode == ShopifyLineQuantityMode.FulfillableOrOrdered
+                ? ReadFulfillableOrOrderedQuantity(item)
+                : ReadInt(item, "quantity");
+            if (quantity <= 0)
+            {
+                continue;
+            }
+
+            var externalId = ReadVariantExternalId(item);
             if (string.IsNullOrWhiteSpace(externalId))
             {
                 continue;
@@ -236,5 +321,57 @@ internal static class ShopifyOrderPayload
         }
 
         return lines;
+    }
+
+    private static int ReadFulfillableOrOrderedQuantity(JsonElement item)
+    {
+        if (item.TryGetProperty("fulfillable_quantity", out _))
+        {
+            return ReadInt(item, "fulfillable_quantity");
+        }
+
+        return ReadInt(item, "quantity");
+    }
+
+    private static int ReadInt(JsonElement item, string propertyName)
+    {
+        if (!item.TryGetProperty(propertyName, out var qtyEl))
+        {
+            return 0;
+        }
+
+        return qtyEl.ValueKind switch
+        {
+            JsonValueKind.Number => qtyEl.TryGetInt32(out var n) ? n : 0,
+            JsonValueKind.String => int.TryParse(qtyEl.GetString(), out var q) ? q : 0,
+            _ => 0
+        };
+    }
+
+    private static string? ReadVariantExternalId(JsonElement item)
+    {
+        if (item.TryGetProperty("admin_graphql_api_id", out var gql) &&
+            gql.ValueKind == JsonValueKind.String &&
+            gql.GetString() is { Length: > 0 } gqlId &&
+            gqlId.Contains("ProductVariant", StringComparison.Ordinal))
+        {
+            return gqlId;
+        }
+
+        if (item.TryGetProperty("variant_id", out var variantIdEl))
+        {
+            var numeric = variantIdEl.ValueKind switch
+            {
+                JsonValueKind.Number => variantIdEl.GetInt64().ToString(CultureInfo.InvariantCulture),
+                JsonValueKind.String => variantIdEl.GetString(),
+                _ => null
+            };
+            if (!string.IsNullOrWhiteSpace(numeric))
+            {
+                return $"gid://shopify/ProductVariant/{numeric}";
+            }
+        }
+
+        return null;
     }
 }

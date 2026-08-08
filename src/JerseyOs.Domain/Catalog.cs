@@ -471,6 +471,43 @@ public sealed class InventoryLevel : AuditableEntity, IOrganizationScoped
         Reserved -= quantity;
         Raise(new InventoryAdjusted(VariantId, OrganizationId, -quantity, OnHand, Reserved, reason.Trim(), now));
     }
+
+    /// <summary>
+    /// Releases up to <paramref name="quantity"/> units of reserved stock (no-op if none reserved).
+    /// Used for Shopify cancel/refund-cancel after partial fulfillments.
+    /// </summary>
+    public int ReleaseUpTo(int quantity, string reason, DateTimeOffset now)
+    {
+        if (quantity <= 0 || Reserved <= 0)
+        {
+            return 0;
+        }
+
+        var actual = Math.Min(quantity, Reserved);
+        Release(actual, reason, now);
+        return actual;
+    }
+
+    /// <summary>
+    /// Commits up to <paramref name="quantity"/> units from reserved stock (no-op if none reserved).
+    /// Used when fulfillments and orders/fulfilled may overlap.
+    /// </summary>
+    public int CommitUpTo(int quantity, string reason, DateTimeOffset now)
+    {
+        if (quantity <= 0 || Reserved <= 0)
+        {
+            return 0;
+        }
+
+        var actual = Math.Min(quantity, Math.Min(Reserved, OnHand));
+        if (actual <= 0)
+        {
+            return 0;
+        }
+
+        Commit(actual, reason, now);
+        return actual;
+    }
 }
 
 public sealed class ProductImage : AuditableEntity, IOrganizationScoped

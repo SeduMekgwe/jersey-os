@@ -78,4 +78,26 @@ public sealed class ProductTests
         Assert.Throws<InvalidOperationException>(() => inventory.Commit(5, "shopify-commit", now));
         Assert.Throws<InvalidOperationException>(() => inventory.Release(5, "shopify-release", now));
     }
+
+    [Fact]
+    public void ReleaseUpToAndCommitUpToClampToReserved()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var inventory = new InventoryLevel(Guid.NewGuid(), Guid.NewGuid());
+        inventory.Adjust(10, "receive", now);
+        inventory.Reserve(4, "shopify-reserve", now);
+
+        Assert.Equal(0, inventory.ReleaseUpTo(0, "shopify-release", now));
+        Assert.Equal(2, inventory.ReleaseUpTo(2, "shopify-release", now));
+        Assert.Equal(2, inventory.Reserved);
+        Assert.Equal(2, inventory.ReleaseUpTo(50, "shopify-release", now));
+        Assert.Equal(0, inventory.Reserved);
+        Assert.Equal(0, inventory.ReleaseUpTo(1, "shopify-release", now));
+
+        inventory.Reserve(3, "shopify-reserve", now);
+        Assert.Equal(3, inventory.CommitUpTo(10, "shopify-commit", now));
+        Assert.Equal(7, inventory.OnHand);
+        Assert.Equal(0, inventory.Reserved);
+        Assert.Equal(0, inventory.CommitUpTo(1, "shopify-commit", now));
+    }
 }
