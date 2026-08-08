@@ -65,7 +65,7 @@ public sealed class PublishingIntegrationTests : IAsyncLifetime
         db.ProductsSet.Add(product);
         await db.SaveChangesAsync();
 
-        var job = new PublishProductJob(db, new NullSalesChannelPublisher(), CreateStorage(), TimeProvider.System);
+        var job = new PublishProductJob(db, FixedResolver.Null, CreateStorage(), TimeProvider.System);
         await job.ExecuteAsync(orgId, product.Id, unpublish: false, CancellationToken.None);
 
         var map = await db.ExternalIdMapsSet.IgnoreQueryFilters()
@@ -91,7 +91,7 @@ public sealed class PublishingIntegrationTests : IAsyncLifetime
         db.ProductsSet.Add(product);
         await db.SaveChangesAsync();
 
-        var job = new PublishProductJob(db, new NullSalesChannelPublisher(), CreateStorage(), TimeProvider.System);
+        var job = new PublishProductJob(db, FixedResolver.Null, CreateStorage(), TimeProvider.System);
         await job.ExecuteAsync(orgId, product.Id, unpublish: false, CancellationToken.None);
 
         Assert.Empty(await db.ExternalIdMapsSet.IgnoreQueryFilters().ToListAsync());
@@ -248,5 +248,12 @@ public sealed class PublishingIntegrationTests : IAsyncLifetime
         public void EnqueueProcessWebhook(Guid deliveryId)
         {
         }
+    }
+
+    private sealed class FixedResolver(ISalesChannelPublisher publisher) : ISalesChannelPublisherResolver
+    {
+        public static FixedResolver Null { get; } = new(new NullSalesChannelPublisher());
+
+        public ISalesChannelPublisher? Resolve(string channelCode) => publisher;
     }
 }

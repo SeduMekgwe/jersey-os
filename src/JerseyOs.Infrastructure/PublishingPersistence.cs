@@ -369,7 +369,7 @@ public sealed class HangfirePublishingJobScheduler(IBackgroundJobClient jobs) : 
 
 public sealed class PublishProductJob(
     JerseyOsDbContext db,
-    ISalesChannelPublisher publisher,
+    ISalesChannelPublisherResolver publisherResolver,
     IObjectStorage storage,
     TimeProvider time)
 {
@@ -377,14 +377,12 @@ public sealed class PublishProductJob(
     public async Task ExecuteAsync(
         Guid organizationId, Guid productId, bool unpublish, CancellationToken cancellationToken)
     {
-        var channel = await db.SalesChannelsSet.IgnoreQueryFilters()
-            .SingleOrDefaultAsync(
-                x => x.OrganizationId == organizationId
-                     && x.Code == SalesChannelCodes.Shopify
-                     && x.Enabled,
-                cancellationToken)
+        var channels = await db.SalesChannelsSet.IgnoreQueryFilters()
+            .Where(x => x.OrganizationId == organizationId && x.Enabled)
+            .OrderBy(x => x.Code)
+            .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
-        if (channel is null)
+        if (channels.Count == 0)
         {
             return;
         }
@@ -401,12 +399,50 @@ public sealed class PublishProductJob(
             return;
         }
 
-        var run = await EnsureRunAsync(organizationId, channel.Id, productId, cancellationToken).ConfigureAwait(false);
+        Exception? firstFailure = null;
+        foreach (var channel in channels)
+        {
+            try
+            {
+                await PublishToChannelAsync(
+                        organizationId, channel, product, unpublish, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception exception)
+            {
+                firstFailure ??= exception;
+            }
+        }
+
+        if (firstFailure is not null)
+        {
+            throw firstFailure;
+        }
+    }
+
+    private async Task PublishToChannelAsync(
+        Guid organizationId,
+        SalesChannel channel,
+        Product product,
+        bool unpublish,
+        CancellationToken cancellationToken)
+    {
+        var publisher = publisherResolver.Resolve(channel.Code);
+        var run = await EnsureRunAsync(organizationId, channel.Id, product.Id, cancellationToken)
+            .ConfigureAwait(false);
         var now = time.GetUtcNow();
+        if (publisher is null)
+        {
+            // Enabled in UI but credentials missing — fail this channel only; do not retry siblings.
+            run.MarkFailed($"Publisher for channel '{channel.Code}' is not configured.", now);
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         try
         {
             var productMap = await GetMapAsync(
-                    organizationId, channel.Id, PublishEntityTypes.Product, productId, cancellationToken)
+                    organizationId, channel.Id, PublishEntityTypes.Product, product.Id, cancellationToken)
                 .ConfigureAwait(false);
 
             if (unpublish || product.Status == ProductStatus.Archived)
@@ -576,19 +612,17 @@ public sealed class PublishProductJob(
 
 public sealed class SyncInventoryJob(
     JerseyOsDbContext db,
-    ISalesChannelPublisher publisher)
+    ISalesChannelPublisherResolver publisherResolver)
 {
     [AutomaticRetry(Attempts = 5)]
     public async Task ExecuteAsync(Guid organizationId, Guid variantId, CancellationToken cancellationToken)
     {
-        var channel = await db.SalesChannelsSet.IgnoreQueryFilters()
-            .SingleOrDefaultAsync(
-                x => x.OrganizationId == organizationId
-                     && x.Code == SalesChannelCodes.Shopify
-                     && x.Enabled,
-                cancellationToken)
+        var channels = await db.SalesChannelsSet.IgnoreQueryFilters()
+            .Where(x => x.OrganizationId == organizationId && x.Enabled)
+            .OrderBy(x => x.Code)
+            .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
-        if (channel is null)
+        if (channels.Count == 0)
         {
             return;
         }
@@ -603,21 +637,44 @@ public sealed class SyncInventoryJob(
             return;
         }
 
-        var map = await db.ExternalIdMapsSet.IgnoreQueryFilters()
-            .SingleOrDefaultAsync(
-                x => x.OrganizationId == organizationId
-                     && x.ChannelId == channel.Id
-                     && x.EntityType == PublishEntityTypes.Variant
-                     && x.LocalId == variantId,
-                cancellationToken)
-            .ConfigureAwait(false);
-        if (map is null)
+        var available = Math.Max(0, variant.Inventory.OnHand - variant.Inventory.Reserved);
+        Exception? firstFailure = null;
+        foreach (var channel in channels)
         {
-            return;
+            var publisher = publisherResolver.Resolve(channel.Code);
+            if (publisher is null)
+            {
+                continue;
+            }
+
+            var map = await db.ExternalIdMapsSet.IgnoreQueryFilters()
+                .SingleOrDefaultAsync(
+                    x => x.OrganizationId == organizationId
+                         && x.ChannelId == channel.Id
+                         && x.EntityType == PublishEntityTypes.Variant
+                         && x.LocalId == variantId,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (map is null)
+            {
+                continue;
+            }
+
+            try
+            {
+                await publisher.SetInventoryAsync(map.ExternalId, available, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception exception)
+            {
+                firstFailure ??= exception;
+            }
         }
 
-        var available = Math.Max(0, variant.Inventory.OnHand - variant.Inventory.Reserved);
-        await publisher.SetInventoryAsync(map.ExternalId, available, cancellationToken).ConfigureAwait(false);
+        if (firstFailure is not null)
+        {
+            throw firstFailure;
+        }
     }
 }
 
@@ -627,18 +684,18 @@ public static class PublishingInfrastructureExtensions
         this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<ShopifyOptions>(configuration.GetSection(ShopifyOptions.Section));
+        services.Configure<WooCommerceOptions>(configuration.GetSection(WooCommerceOptions.Section));
         services.AddSingleton<NullSalesChannelPublisher>();
         services.AddScoped<ShopifySalesChannelPublisher>();
+        services.AddScoped<WooCommerceSalesChannelPublisher>();
+        services.AddScoped<ISalesChannelPublisherResolver, SalesChannelPublisherResolver>();
         services.AddHttpClient("shopify", client =>
         {
             client.Timeout = TimeSpan.FromSeconds(60);
         });
-        services.AddScoped<ISalesChannelPublisher>(sp =>
+        services.AddHttpClient("woocommerce", client =>
         {
-            var opts = sp.GetRequiredService<IOptions<ShopifyOptions>>().Value;
-            return string.IsNullOrWhiteSpace(opts.AccessToken)
-                ? sp.GetRequiredService<NullSalesChannelPublisher>()
-                : sp.GetRequiredService<ShopifySalesChannelPublisher>();
+            client.Timeout = TimeSpan.FromSeconds(60);
         });
         services.AddScoped<IPublishingJobScheduler, HangfirePublishingJobScheduler>();
         services.AddSingleton<IShopifyWebhookHmac, ShopifyWebhookHmac>();

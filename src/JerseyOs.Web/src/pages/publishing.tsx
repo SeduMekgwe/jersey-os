@@ -39,7 +39,8 @@ export function PublishingPage() {
       <div>
         <h1 className="text-3xl font-semibold tracking-tight">Publishing</h1>
         <p className="mt-2 text-muted-foreground">
-          Sales channel sync status for Active catalog products.
+          Multi-channel sync (Shopify, WooCommerce) for Active catalog products. Enable a channel
+          only when its credentials are configured.
         </p>
       </div>
 

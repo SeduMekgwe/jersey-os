@@ -37,6 +37,15 @@ public interface ISalesChannelPublisher
     Task SetInventoryAsync(string externalVariantId, int availableQuantity, CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// Resolves the outbound publisher for a sales channel code (e.g. shopify, woocommerce).
+/// Returns null when the channel has no configured adapter/credentials.
+/// </summary>
+public interface ISalesChannelPublisherResolver
+{
+    ISalesChannelPublisher? Resolve(string channelCode);
+}
+
 public interface IPublishingJobScheduler
 {
     void EnqueuePublishProduct(Guid organizationId, Guid productId, bool unpublish);
@@ -152,38 +161,50 @@ public sealed class RepublishProductHandler(
             return null;
         }
 
-        var channel = await db.SalesChannels
-            .SingleOrDefaultAsync(x => x.Code == SalesChannelCodes.Shopify && x.Enabled, cancellationToken)
+        var channels = await db.SalesChannels
+            .Where(x => x.Enabled)
+            .OrderBy(x => x.Code)
+            .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
-        if (channel is null)
+        if (channels.Count == 0)
         {
             return null;
         }
 
-        var run = await db.PublishRuns
-            .Include(x => x.Channel)
-            .SingleOrDefaultAsync(
-                x => x.ChannelId == channel.Id && x.ProductId == product.Id,
-                cancellationToken)
-            .ConfigureAwait(false);
-        if (run is null)
+        PublishRun? primaryRun = null;
+        foreach (var channel in channels)
         {
-            run = new PublishRun(orgId, channel.Id, product.Id);
-            db.Add(run);
-        }
-        else
-        {
-            run.MarkPending();
+            var run = await db.PublishRuns
+                .Include(x => x.Channel)
+                .SingleOrDefaultAsync(
+                    x => x.ChannelId == channel.Id && x.ProductId == product.Id,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (run is null)
+            {
+                run = new PublishRun(orgId, channel.Id, product.Id);
+                db.Add(run);
+            }
+            else
+            {
+                run.MarkPending();
+            }
+
+            primaryRun ??= run;
+            if (channel.Code == SalesChannelCodes.Shopify)
+            {
+                primaryRun = run;
+            }
         }
 
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         jobs.EnqueuePublishProduct(orgId, product.Id, unpublish: false);
 
-        run = await db.PublishRuns.AsNoTracking()
+        primaryRun = await db.PublishRuns.AsNoTracking()
             .Include(x => x.Channel)
-            .SingleAsync(x => x.Id == run.Id, cancellationToken)
+            .SingleAsync(x => x.Id == primaryRun!.Id, cancellationToken)
             .ConfigureAwait(false);
-        return PublishingMapping.ToResponse(run);
+        return PublishingMapping.ToResponse(primaryRun);
     }
 }
 

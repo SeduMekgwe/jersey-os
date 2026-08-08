@@ -33,6 +33,10 @@ Configuration is loaded from `appsettings*.json`, environment variables, and an 
 | `Shopify__AccessToken` | Admin API access token; empty selects null publisher | Yes | Hosted when publishing |
 | `Shopify__ApiVersion` | Admin GraphQL API version | No | Hosted when publishing |
 | `Shopify__WebhookSecret` | HMAC secret for inbound order webhooks | Yes | Hosted when publishing |
+| `WooCommerce__StoreBaseUrl` | WooCommerce store base URL (e.g. `https://shop.example`) | No | Hosted when publishing to Woo |
+| `WooCommerce__ConsumerKey` | WooCommerce REST consumer key | Yes | When Woo channel enabled |
+| `WooCommerce__ConsumerSecret` | WooCommerce REST consumer secret | Yes | When Woo channel enabled |
+| `WooCommerce__ApiVersion` | REST API version path segment (default `v3`) | No | When publishing to Woo |
 
 ## Rules
 

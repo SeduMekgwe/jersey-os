@@ -26,6 +26,7 @@ public static class PublishEntityTypes
 public static class SalesChannelCodes
 {
     public const string Shopify = "shopify";
+    public const string WooCommerce = "woocommerce";
 }
 
 public sealed class SalesChannel : AuditableEntity, IOrganizationScoped

@@ -104,6 +104,15 @@ public static class Bootstrapper
             db.SalesChannelsSet.Add(new SalesChannel(organizationId, SalesChannelCodes.Shopify, "Shopify", enabled: true));
         }
 
+        if (!await db.SalesChannelsSet.IgnoreQueryFilters()
+                .AnyAsync(
+                    x => x.OrganizationId == organizationId && x.Code == SalesChannelCodes.WooCommerce,
+                    cancellationToken))
+        {
+            db.SalesChannelsSet.Add(
+                new SalesChannel(organizationId, SalesChannelCodes.WooCommerce, "WooCommerce", enabled: false));
+        }
+
         await db.SaveChangesAsync(cancellationToken);
     }
 }
