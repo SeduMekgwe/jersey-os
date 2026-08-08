@@ -14,6 +14,12 @@ public sealed class ObjectStorageOptions
     public string Provider { get; set; } = "Local";
     public string LocalRootPath { get; set; } = "App_Data/object-storage";
     public string PublicBasePath { get; set; } = "/media";
+    /// <summary>
+    /// Optional absolute public base (e.g. https://api.example.com/media). When set, Local GetUrl returns absolute URLs.
+    /// Also used as fallback public base for Azure Blob when AzureBlob:PublicBaseUrl is empty.
+    /// </summary>
+    public string? PublicBaseUrl { get; set; }
+    public AzureBlobObjectStorageOptions AzureBlob { get; set; } = new();
 }
 
 public sealed class LocalObjectStorage(IOptions<ObjectStorageOptions> options, IHostEnvironment environment) : IObjectStorage
@@ -47,19 +53,27 @@ public sealed class LocalObjectStorage(IOptions<ObjectStorageOptions> options, I
 
     public string GetUrl(string key)
     {
+        var normalized = key.TrimStart('/');
+        if (!string.IsNullOrWhiteSpace(options.Value.PublicBaseUrl))
+        {
+            return $"{options.Value.PublicBaseUrl.TrimEnd('/')}/{normalized}";
+        }
+
         var basePath = options.Value.PublicBasePath.TrimEnd('/');
-        return $"{basePath}/{key.TrimStart('/')}";
+        return $"{basePath}/{normalized}";
     }
 
-    public Stream OpenRead(string key)
+    public Task<Stream> OpenReadAsync(string key, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var path = ResolvePath(key);
         if (!File.Exists(path))
         {
-            throw new FileNotFoundException("Import object was not found in local storage.", path);
+            throw new FileNotFoundException("Object was not found in local storage.", path);
         }
 
-        return File.OpenRead(path);
+        Stream stream = File.OpenRead(path);
+        return Task.FromResult(stream);
     }
 
     private string ResolvePath(string key)
@@ -181,7 +195,30 @@ public static class CatalogModelBuilder
     public static IServiceCollection AddObjectStorage(this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<ObjectStorageOptions>(configuration.GetSection(ObjectStorageOptions.Section));
-        services.AddSingleton<IObjectStorage, LocalObjectStorage>();
+        var provider = configuration.GetSection(ObjectStorageOptions.Section)["Provider"] ?? "Local";
+
+        if (ObjectStorageRegistration.IsAzureBlobProvider(provider))
+        {
+            var bound = configuration.GetSection(ObjectStorageOptions.Section).Get<ObjectStorageOptions>()
+                ?? new ObjectStorageOptions();
+            ObjectStorageRegistration.ValidateAzureBlobOptions(bound);
+
+            services.AddSingleton<IAzureBlobGateway>(sp =>
+            {
+                var opts = sp.GetRequiredService<IOptions<ObjectStorageOptions>>().Value;
+                ObjectStorageRegistration.ValidateAzureBlobOptions(opts);
+                var serviceClient = new Azure.Storage.Blobs.BlobServiceClient(opts.AzureBlob.ConnectionString);
+                var container = serviceClient.GetBlobContainerClient(opts.AzureBlob.ContainerName);
+                container.CreateIfNotExists();
+                return new AzureBlobContainerGateway(container);
+            });
+            services.AddSingleton<IObjectStorage, AzureBlobObjectStorage>();
+        }
+        else
+        {
+            services.AddSingleton<IObjectStorage, LocalObjectStorage>();
+        }
+
         return services;
     }
 }

@@ -16,4 +16,5 @@ ADRs are immutable decision history. Supersede an accepted ADR with a new ADR; d
 - [0012 — Publishing module and Shopify sales channel](0012-publishing-shopify.md)
 - [0013 — Catalog variant pricing](0013-catalog-variant-pricing.md)
 - [0014 — Shopify order webhooks and inventory reservation](0014-shopify-inventory-webhooks.md)
+- [0015 — Azure Blob object storage adapter](0015-azure-blob-object-storage.md)
 - [Template](template.md)

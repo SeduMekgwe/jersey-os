@@ -133,18 +133,9 @@ public sealed class ParseImportBatchJob(
         }
     }
 
-    private static async Task<Stream> OpenStoredFileAsync(
-        IObjectStorage storage, string key, CancellationToken cancellationToken)
-    {
-        if (storage is LocalObjectStorage local)
-        {
-            return local.OpenRead(key);
-        }
-
-        // Fallback: re-parse via URL download is not used for local adapter.
-        await Task.CompletedTask.ConfigureAwait(false);
-        throw new InvalidOperationException("Stored import file cannot be opened by the configured storage adapter.");
-    }
+    private static Task<Stream> OpenStoredFileAsync(
+        IObjectStorage storage, string key, CancellationToken cancellationToken) =>
+        storage.OpenReadAsync(key, cancellationToken);
 }
 
 public static class ImportInfrastructureExtensions

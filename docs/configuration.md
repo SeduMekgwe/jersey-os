@@ -19,9 +19,13 @@ Configuration is loaded from `appsettings*.json`, environment variables, and an 
 | `OpenTelemetry__OtlpEndpoint` | OTLP collector endpoint | Sometimes | Hosted |
 | `Cors__AllowedOrigins` | Exact trusted web origins | No | Hosted |
 | `DataProtection__KeyStore` | Shared encrypted key-ring location | Sensitive | Hosted |
-| `ObjectStorage__Provider` | Storage adapter (`Local` today) | No | All |
+| `ObjectStorage__Provider` | Storage adapter (`Local` \| `AzureBlob`; default `Local`) | No | All |
 | `ObjectStorage__LocalRootPath` | Local filesystem root for media | No | Local |
-| `ObjectStorage__PublicBasePath` | Public URL prefix for media (`/media`) | No | Local |
+| `ObjectStorage__PublicBasePath` | Relative public URL prefix for media (`/media`) | No | Local |
+| `ObjectStorage__PublicBaseUrl` | Optional absolute public base (e.g. `https://api.example.com/media`); Local uses it for absolute `GetUrl`; Azure falls back to it when Azure public base is empty | No | Hosted |
+| `ObjectStorage__AzureBlob__ConnectionString` | Azure Storage connection string | Yes | When `Provider=AzureBlob` |
+| `ObjectStorage__AzureBlob__ContainerName` | Blob container name (created if missing) | No | When `Provider=AzureBlob` |
+| `ObjectStorage__AzureBlob__PublicBaseUrl` | Optional override for absolute blob/CDN base URL | No | When `Provider=AzureBlob` |
 | `Database__ConnectionString` | SQL Server connection | Yes | All |
 | `Database__DefaultOrganizationId` | Default org for single-tenant-ready mode | No | All |
 | `Jwt__SigningKey` | HMAC signing material (min 32 bytes) | Yes | All |
