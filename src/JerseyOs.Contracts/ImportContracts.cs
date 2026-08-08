@@ -1,7 +1,33 @@
 namespace JerseyOs.Contracts;
 
-public sealed record SupplierResponse(Guid Id, string Name, string Code);
-public sealed record CreateSupplierRequest(string Name, string Code);
+public sealed record SupplierResponse(
+    Guid Id,
+    string Name,
+    string Code,
+    string FeedKind,
+    string FeedFormat,
+    string? FeedUrl,
+    bool HasFeedAuth,
+    string? SyncCron,
+    DateTimeOffset? LastSyncAtUtc,
+    string? LastSyncStatus,
+    string? LastSyncError);
+
+public sealed record CreateSupplierRequest(
+    string Name,
+    string Code,
+    string? FeedKind = null,
+    string? FeedFormat = null,
+    string? FeedUrl = null,
+    string? FeedBearerToken = null,
+    string? SyncCron = null);
+
+public sealed record UpdateSupplierFeedRequest(
+    string FeedKind,
+    string FeedFormat,
+    string? FeedUrl,
+    string? FeedBearerToken,
+    string? SyncCron);
 
 public sealed record ImportBatchSummaryResponse(
     Guid Id,

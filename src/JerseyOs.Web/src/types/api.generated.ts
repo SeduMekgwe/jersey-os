@@ -422,6 +422,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/import/suppliers/{supplierId}/feed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateSupplierFeed"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/import/suppliers/{supplierId}/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["syncSupplierFeed"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/import/batches": {
         parameters: {
             query?: never;
@@ -785,10 +817,31 @@ export interface components {
             id: string;
             name: string;
             code: string;
+            feedKind: string;
+            feedFormat: string;
+            feedUrl?: string | null;
+            hasFeedAuth: boolean;
+            syncCron?: string | null;
+            /** Format: date-time */
+            lastSyncAtUtc?: string | null;
+            lastSyncStatus?: string | null;
+            lastSyncError?: string | null;
         };
         CreateSupplierRequest: {
             name: string;
             code: string;
+            feedKind?: string | null;
+            feedFormat?: string | null;
+            feedUrl?: string | null;
+            feedBearerToken?: string | null;
+            syncCron?: string | null;
+        };
+        UpdateSupplierFeedRequest: {
+            feedKind: string;
+            feedFormat: string;
+            feedUrl?: string | null;
+            feedBearerToken?: string | null;
+            syncCron?: string | null;
         };
         ImportBatchSummaryResponse: {
             /** Format: uuid */
@@ -1868,6 +1921,68 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["SupplierResponse"];
                 };
+            };
+        };
+    };
+    updateSupplierFeed: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                supplierId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSupplierFeedRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupplierResponse"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    syncSupplierFeed: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                supplierId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sync enqueued */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupplierResponse"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

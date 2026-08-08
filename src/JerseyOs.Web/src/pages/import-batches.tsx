@@ -17,6 +17,11 @@ export function ImportBatchesPage() {
   const [supplierId, setSupplierId] = useState('');
   const [supplierName, setSupplierName] = useState('');
   const [supplierCode, setSupplierCode] = useState('');
+  const [feedKind, setFeedKind] = useState<'upload' | 'http'>('upload');
+  const [feedFormat, setFeedFormat] = useState<'csv' | 'json'>('csv');
+  const [feedUrl, setFeedUrl] = useState('');
+  const [feedBearerToken, setFeedBearerToken] = useState('');
+  const [syncCron, setSyncCron] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const suppliersQuery = useQuery({
@@ -37,6 +42,23 @@ export function ImportBatchesPage() {
       setSupplierId(supplier.id);
       setSupplierName('');
       setSupplierCode('');
+      setFeedUrl('');
+      setFeedBearerToken('');
+      setSyncCron('');
+      setFeedKind('upload');
+      setFeedFormat('csv');
+    },
+    onError: (err: Error) => {
+      setError(err.message);
+    },
+  });
+
+  const syncSupplier = useMutation({
+    mutationFn: (id: string) =>
+      apiRequest<SupplierDto>(`/import/suppliers/${id}/sync`, { method: 'POST', body: '{}' }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['import', 'suppliers'] });
+      void queryClient.invalidateQueries({ queryKey: ['import', 'batches'] });
     },
     onError: (err: Error) => {
       setError(err.message);
@@ -59,12 +81,14 @@ export function ImportBatchesPage() {
     },
   });
 
+  const selected = (suppliersQuery.data ?? []).find((s) => s.id === supplierId);
+
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <div>
         <h1 className="text-3xl font-semibold tracking-tight">Supplier import</h1>
         <p className="mt-2 text-muted-foreground">
-          Upload CSV feeds, review proposed items, and approve into draft catalog products.
+          Upload CSV/JSON or sync HTTP supplier feeds into the review queue, then approve into draft catalog.
         </p>
       </div>
       {error && (
@@ -74,9 +98,9 @@ export function ImportBatchesPage() {
       )}
       {canUpload && (
         <Card className="space-y-4 p-5">
-          <h2 className="text-xl font-medium">Upload batch</h2>
+          <h2 className="text-xl font-medium">Suppliers</h2>
           <label className="grid gap-1 text-sm">
-            Supplier
+            Active supplier
             <select
               className="h-10 rounded-md border border-input bg-background px-3 text-sm"
               value={supplierId}
@@ -87,11 +111,42 @@ export function ImportBatchesPage() {
               <option value="">Select supplier</option>
               {(suppliersQuery.data ?? []).map((supplier) => (
                 <option key={supplier.id} value={supplier.id}>
-                  {supplier.name}
+                  {supplier.name} ({supplier.feedKind}/{supplier.feedFormat})
                 </option>
               ))}
             </select>
           </label>
+          {selected && (
+            <div className="space-y-2 rounded-md border border-border p-3 text-sm">
+              <p>
+                {selected.feedKind === 'http'
+                  ? `HTTP feed: ${selected.feedUrl ?? '—'}`
+                  : 'Upload feed (manual file)'}
+              </p>
+              {selected.lastSyncStatus && (
+                <p className="text-muted-foreground">
+                  Last sync: {selected.lastSyncStatus}
+                  {selected.lastSyncAtUtc
+                    ? ` · ${new Date(selected.lastSyncAtUtc).toLocaleString()}`
+                    : ''}
+                  {selected.lastSyncError ? ` · ${selected.lastSyncError}` : ''}
+                </p>
+              )}
+              {selected.feedKind === 'http' && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={syncSupplier.isPending}
+                  onClick={() => {
+                    setError(null);
+                    syncSupplier.mutate(selected.id);
+                  }}
+                >
+                  Sync now
+                </Button>
+              )}
+            </div>
+          )}
           <div className="grid gap-3 md:grid-cols-3">
             <Input
               placeholder="New supplier name"
@@ -107,27 +162,86 @@ export function ImportBatchesPage() {
                 setSupplierCode(e.target.value);
               }}
             />
-            <Button
-              variant="outline"
-              onClick={() => {
-                setError(null);
-                createSupplier.mutate({ name: supplierName, code: supplierCode });
+            <select
+              className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+              value={feedKind}
+              onChange={(e) => {
+                setFeedKind(e.target.value as 'upload' | 'http');
               }}
             >
-              Create supplier
-            </Button>
+              <option value="upload">Upload</option>
+              <option value="http">HTTP</option>
+            </select>
           </div>
-          <Input
-            type="file"
-            accept=".csv,text/csv"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) {
-                setError(null);
-                upload.mutate(file);
-              }
+          <div className="grid gap-3 md:grid-cols-3">
+            <select
+              className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+              value={feedFormat}
+              onChange={(e) => {
+                setFeedFormat(e.target.value as 'csv' | 'json');
+              }}
+            >
+              <option value="csv">CSV</option>
+              <option value="json">JSON</option>
+            </select>
+            {feedKind === 'http' && (
+              <>
+                <Input
+                  placeholder="https://supplier.example/feed.json"
+                  value={feedUrl}
+                  onChange={(e) => {
+                    setFeedUrl(e.target.value);
+                  }}
+                />
+                <Input
+                  placeholder="Bearer token (optional)"
+                  value={feedBearerToken}
+                  onChange={(e) => {
+                    setFeedBearerToken(e.target.value);
+                  }}
+                />
+              </>
+            )}
+          </div>
+          {feedKind === 'http' && (
+            <Input
+              placeholder="Hangfire cron (optional, e.g. 0 */6 * * *)"
+              value={syncCron}
+              onChange={(e) => {
+                setSyncCron(e.target.value);
+              }}
+            />
+          )}
+          <Button
+            variant="outline"
+            onClick={() => {
+              setError(null);
+              createSupplier.mutate({
+                name: supplierName,
+                code: supplierCode,
+                feedKind,
+                feedFormat,
+                feedUrl: feedKind === 'http' ? feedUrl : null,
+                feedBearerToken: feedKind === 'http' && feedBearerToken ? feedBearerToken : null,
+                syncCron: feedKind === 'http' && syncCron ? syncCron : null,
+              });
             }}
-          />
+          >
+            Create supplier
+          </Button>
+          {(!selected || selected.feedKind === 'upload') && (
+            <Input
+              type="file"
+              accept=".csv,.json,text/csv,application/json"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  setError(null);
+                  upload.mutate(file);
+                }
+              }}
+            />
+          )}
         </Card>
       )}
       <div className="grid gap-3">

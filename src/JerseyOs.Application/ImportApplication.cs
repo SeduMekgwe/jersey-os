@@ -29,9 +29,17 @@ public interface ISupplierCatalogFeed
     Task<IReadOnlyList<SupplierCatalogRow>> ParseAsync(Stream content, CancellationToken cancellationToken);
 }
 
+public interface ISupplierCatalogFeedResolver
+{
+    ISupplierCatalogFeed Resolve(string format);
+}
+
 public interface IImportJobScheduler
 {
     void EnqueueParse(Guid batchId);
+    void EnqueueFetchSupplierFeed(Guid supplierId);
+    void UpsertSupplierFeedSchedule(Guid organizationId, Guid supplierId, string? cronExpression);
+    void RemoveSupplierFeedSchedule(Guid organizationId, Guid supplierId);
 }
 
 public static class ImportSlug
@@ -44,7 +52,24 @@ public static class ImportSlug
     }
 }
 
-public sealed record CreateSupplierCommand(string Name, string Code) : IRequest<SupplierResponse>;
+public sealed record CreateSupplierCommand(
+    string Name,
+    string Code,
+    string? FeedKind,
+    string? FeedFormat,
+    string? FeedUrl,
+    string? FeedBearerToken,
+    string? SyncCron) : IRequest<SupplierResponse>;
+
+public sealed record UpdateSupplierFeedCommand(
+    Guid SupplierId,
+    string FeedKind,
+    string FeedFormat,
+    string? FeedUrl,
+    string? FeedBearerToken,
+    string? SyncCron) : IRequest<SupplierResponse?>;
+
+public sealed record SyncSupplierFeedCommand(Guid SupplierId) : IRequest<SupplierResponse?>;
 public sealed record ListSuppliersQuery : IRequest<IReadOnlyCollection<SupplierResponse>>;
 public sealed record UploadImportBatchCommand(
     Guid SupplierId,
@@ -77,6 +102,20 @@ public sealed class CreateSupplierValidator : AbstractValidator<CreateSupplierCo
     {
         RuleFor(x => x.Name).NotEmpty().MaximumLength(200);
         RuleFor(x => x.Code).NotEmpty().MaximumLength(64).Matches("^[a-z0-9]+(?:-[a-z0-9]+)*$");
+        RuleFor(x => x.FeedUrl).MaximumLength(1000).When(x => !string.IsNullOrWhiteSpace(x.FeedUrl));
+        RuleFor(x => x.SyncCron).MaximumLength(64).When(x => !string.IsNullOrWhiteSpace(x.SyncCron));
+    }
+}
+
+public sealed class UpdateSupplierFeedValidator : AbstractValidator<UpdateSupplierFeedCommand>
+{
+    public UpdateSupplierFeedValidator()
+    {
+        RuleFor(x => x.SupplierId).NotEmpty();
+        RuleFor(x => x.FeedKind).NotEmpty().MaximumLength(32);
+        RuleFor(x => x.FeedFormat).NotEmpty().MaximumLength(32);
+        RuleFor(x => x.FeedUrl).MaximumLength(1000).When(x => !string.IsNullOrWhiteSpace(x.FeedUrl));
+        RuleFor(x => x.SyncCron).MaximumLength(64).When(x => !string.IsNullOrWhiteSpace(x.SyncCron));
     }
 }
 
@@ -92,8 +131,10 @@ public sealed class UpdateImportItemValidator : AbstractValidator<UpdateImportIt
     }
 }
 
-public sealed class CreateSupplierHandler(IApplicationDbContext db, ICurrentRequest current)
-    : IRequestHandler<CreateSupplierCommand, SupplierResponse>
+public sealed class CreateSupplierHandler(
+    IApplicationDbContext db,
+    ICurrentRequest current,
+    IImportJobScheduler jobs) : IRequestHandler<CreateSupplierCommand, SupplierResponse>
 {
     public async Task<SupplierResponse> Handle(CreateSupplierCommand request, CancellationToken cancellationToken)
     {
@@ -105,9 +146,69 @@ public sealed class CreateSupplierHandler(IApplicationDbContext db, ICurrentRequ
         }
 
         var supplier = new Supplier(orgId, request.Name, code);
+        SupplierFeedConfiguration.ApplyFeedConfiguration(
+            supplier,
+            request.FeedKind,
+            request.FeedFormat,
+            request.FeedUrl,
+            request.FeedBearerToken,
+            request.SyncCron);
         db.Add(supplier);
         await db.SaveChangesAsync(cancellationToken);
-        return new SupplierResponse(supplier.Id, supplier.Name, supplier.Code);
+        jobs.UpsertSupplierFeedSchedule(orgId, supplier.Id, supplier.FeedKind == SupplierFeedKinds.Http ? supplier.SyncCron : null);
+        return ImportMapping.ToSupplierResponse(supplier);
+    }
+}
+
+public sealed class UpdateSupplierFeedHandler(
+    IApplicationDbContext db,
+    IImportJobScheduler jobs) : IRequestHandler<UpdateSupplierFeedCommand, SupplierResponse?>
+{
+    public async Task<SupplierResponse?> Handle(UpdateSupplierFeedCommand request, CancellationToken cancellationToken)
+    {
+        var supplier = await db.Suppliers.SingleOrDefaultAsync(x => x.Id == request.SupplierId, cancellationToken);
+        if (supplier is null)
+        {
+            return null;
+        }
+
+        SupplierFeedConfiguration.ApplyFeedConfiguration(
+            supplier,
+            request.FeedKind,
+            request.FeedFormat,
+            request.FeedUrl,
+            request.FeedBearerToken,
+            request.SyncCron);
+        await db.SaveChangesAsync(cancellationToken);
+        if (supplier.FeedKind == SupplierFeedKinds.Http && !string.IsNullOrWhiteSpace(supplier.SyncCron))
+        {
+            jobs.UpsertSupplierFeedSchedule(supplier.OrganizationId, supplier.Id, supplier.SyncCron);
+        }
+        else
+        {
+            jobs.RemoveSupplierFeedSchedule(supplier.OrganizationId, supplier.Id);
+        }
+
+        return ImportMapping.ToSupplierResponse(supplier);
+    }
+}
+
+public sealed class SyncSupplierFeedHandler(
+    IApplicationDbContext db,
+    IImportJobScheduler jobs) : IRequestHandler<SyncSupplierFeedCommand, SupplierResponse?>
+{
+    public async Task<SupplierResponse?> Handle(
+        SyncSupplierFeedCommand request, CancellationToken cancellationToken)
+    {
+        var supplier = await db.Suppliers.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == request.SupplierId, cancellationToken);
+        if (supplier is null || supplier.FeedKind != SupplierFeedKinds.Http)
+        {
+            return null;
+        }
+
+        jobs.EnqueueFetchSupplierFeed(supplier.Id);
+        return ImportMapping.ToSupplierResponse(supplier);
     }
 }
 
@@ -115,10 +216,44 @@ public sealed class ListSuppliersHandler(IApplicationDbContext db)
     : IRequestHandler<ListSuppliersQuery, IReadOnlyCollection<SupplierResponse>>
 {
     public async Task<IReadOnlyCollection<SupplierResponse>> Handle(
-        ListSuppliersQuery request, CancellationToken cancellationToken) =>
-        await db.Suppliers.AsNoTracking().OrderBy(x => x.Name)
-            .Select(x => new SupplierResponse(x.Id, x.Name, x.Code))
-            .ToArrayAsync(cancellationToken);
+        ListSuppliersQuery request, CancellationToken cancellationToken)
+    {
+        var suppliers = await db.Suppliers.AsNoTracking().OrderBy(x => x.Name).ToArrayAsync(cancellationToken);
+        return suppliers.Select(ImportMapping.ToSupplierResponse).ToArray();
+    }
+}
+
+internal static class SupplierFeedConfiguration
+{
+    public static void ApplyFeedConfiguration(
+        Supplier supplier,
+        string? feedKind,
+        string? feedFormat,
+        string? feedUrl,
+        string? feedBearerToken,
+        string? syncCron)
+    {
+        var kind = string.IsNullOrWhiteSpace(feedKind)
+            ? SupplierFeedKinds.Upload
+            : feedKind.Trim().ToLowerInvariant();
+        var format = string.IsNullOrWhiteSpace(feedFormat) ? SupplierFeedFormats.Csv : feedFormat;
+        if (kind == SupplierFeedKinds.Http)
+        {
+            supplier.ConfigureHttpFeed(
+                feedUrl ?? throw new InvalidOperationException("HTTP suppliers require a feed URL."),
+                format,
+                feedBearerToken,
+                syncCron);
+            return;
+        }
+
+        if (kind != SupplierFeedKinds.Upload)
+        {
+            throw new InvalidOperationException("Feed kind must be 'upload' or 'http'.");
+        }
+
+        supplier.ConfigureUploadFeed(format);
+    }
 }
 
 public sealed class UploadImportBatchHandler(
@@ -298,6 +433,20 @@ public sealed class BulkApproveImportItemsHandler(
 
 public static class ImportMapping
 {
+    public static SupplierResponse ToSupplierResponse(Supplier supplier) =>
+        new(
+            supplier.Id,
+            supplier.Name,
+            supplier.Code,
+            supplier.FeedKind,
+            supplier.FeedFormat,
+            supplier.FeedUrl,
+            !string.IsNullOrWhiteSpace(supplier.FeedBearerToken),
+            supplier.SyncCron,
+            supplier.LastSyncAtUtc,
+            supplier.LastSyncStatus,
+            supplier.LastSyncError);
+
     public static ImportItemResponse ToItem(ImportItem item) =>
         new(
             item.Id,
@@ -563,9 +712,87 @@ public static class ImportApply
     }
 }
 
+public sealed class JsonSupplierCatalogFeed : ISupplierCatalogFeed
+{
+    public string Format => SupplierFeedFormats.Json;
+
+    public async Task<IReadOnlyList<SupplierCatalogRow>> ParseAsync(Stream content, CancellationToken cancellationToken)
+    {
+        using var document = await JsonDocument.ParseAsync(content, cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+        var root = document.RootElement;
+        JsonElement array = root.ValueKind switch
+        {
+            JsonValueKind.Array => root,
+            JsonValueKind.Object when root.TryGetProperty("items", out var items)
+                                     && items.ValueKind == JsonValueKind.Array => items,
+            JsonValueKind.Object when root.TryGetProperty("products", out var products)
+                                     && products.ValueKind == JsonValueKind.Array => products,
+            _ => throw new InvalidOperationException("JSON feed must be an array or an object with 'items'/'products'.")
+        };
+
+        var rows = new List<SupplierCatalogRow>();
+        foreach (var element in array.EnumerateArray())
+        {
+            if (element.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var property in element.EnumerateObject())
+            {
+                map[property.Name] = property.Value.ValueKind switch
+                {
+                    JsonValueKind.String => property.Value.GetString() ?? string.Empty,
+                    JsonValueKind.Number => property.Value.ToString(),
+                    JsonValueKind.True => "true",
+                    JsonValueKind.False => "false",
+                    JsonValueKind.Null => string.Empty,
+                    _ => property.Value.ToString()
+                };
+            }
+
+            var qtyRaw = Get(map, "qty") ?? Get(map, "quantity");
+            int? qty = null;
+            if (!string.IsNullOrWhiteSpace(qtyRaw)
+                && int.TryParse(qtyRaw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedQty))
+            {
+                qty = parsedQty;
+            }
+
+            var priceRaw = Get(map, "price") ?? Get(map, "price_amount");
+            decimal? price = null;
+            if (!string.IsNullOrWhiteSpace(priceRaw)
+                && decimal.TryParse(priceRaw, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsedPrice)
+                && parsedPrice >= 0)
+            {
+                price = parsedPrice;
+            }
+
+            rows.Add(new SupplierCatalogRow(
+                Get(map, "style_code") ?? string.Empty,
+                Get(map, "name") ?? string.Empty,
+                Get(map, "sku") ?? string.Empty,
+                Get(map, "size") ?? string.Empty,
+                Get(map, "team"),
+                Get(map, "season"),
+                qty,
+                price,
+                Get(map, "image_url") ?? Get(map, "imageurl"),
+                map));
+        }
+
+        return rows;
+    }
+
+    private static string? Get(Dictionary<string, string> map, string key) =>
+        map.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value) ? value : null;
+}
+
 public sealed class CsvSupplierCatalogFeed : ISupplierCatalogFeed
 {
-    public string Format => "csv";
+    public string Format => SupplierFeedFormats.Csv;
 
     public async Task<IReadOnlyList<SupplierCatalogRow>> ParseAsync(Stream content, CancellationToken cancellationToken)
     {

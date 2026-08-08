@@ -26,6 +26,18 @@ public enum ImportMatchHint
     Ambiguous = 2
 }
 
+public static class SupplierFeedKinds
+{
+    public const string Upload = "upload";
+    public const string Http = "http";
+}
+
+public static class SupplierFeedFormats
+{
+    public const string Csv = "csv";
+    public const string Json = "json";
+}
+
 public sealed class Supplier : AuditableEntity, IOrganizationScoped
 {
     private Supplier() { }
@@ -34,11 +46,21 @@ public sealed class Supplier : AuditableEntity, IOrganizationScoped
     {
         OrganizationId = organizationId;
         Rename(name, code);
+        FeedKind = SupplierFeedKinds.Upload;
+        FeedFormat = SupplierFeedFormats.Csv;
     }
 
     public Guid OrganizationId { get; private set; }
     public string Name { get; private set; } = string.Empty;
     public string Code { get; private set; } = string.Empty;
+    public string FeedKind { get; private set; } = SupplierFeedKinds.Upload;
+    public string FeedFormat { get; private set; } = SupplierFeedFormats.Csv;
+    public string? FeedUrl { get; private set; }
+    public string? FeedBearerToken { get; private set; }
+    public string? SyncCron { get; private set; }
+    public DateTimeOffset? LastSyncAtUtc { get; private set; }
+    public string? LastSyncStatus { get; private set; }
+    public string? LastSyncError { get; private set; }
 
     public void Rename(string name, string code)
     {
@@ -46,6 +68,63 @@ public sealed class Supplier : AuditableEntity, IOrganizationScoped
         ArgumentException.ThrowIfNullOrWhiteSpace(code);
         Name = name.Trim();
         Code = code.Trim().ToLowerInvariant();
+    }
+
+    public void ConfigureUploadFeed(string contentFormat = SupplierFeedFormats.Csv)
+    {
+        FeedKind = SupplierFeedKinds.Upload;
+        FeedFormat = NormalizeFormat(contentFormat);
+        FeedUrl = null;
+        FeedBearerToken = null;
+        SyncCron = null;
+    }
+
+    public void ConfigureHttpFeed(
+        string feedUrl,
+        string contentFormat,
+        string? bearerToken,
+        string? syncCron)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(feedUrl);
+        if (!Uri.TryCreate(feedUrl.Trim(), UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            throw new InvalidOperationException("Feed URL must be an absolute http(s) URL.");
+        }
+
+        FeedKind = SupplierFeedKinds.Http;
+        FeedUrl = uri.ToString();
+        FeedFormat = NormalizeFormat(contentFormat);
+        FeedBearerToken = string.IsNullOrWhiteSpace(bearerToken) ? null : bearerToken.Trim();
+        SyncCron = string.IsNullOrWhiteSpace(syncCron) ? null : syncCron.Trim();
+    }
+
+    public void RecordSyncSucceeded(DateTimeOffset now)
+    {
+        LastSyncAtUtc = now;
+        LastSyncStatus = "Succeeded";
+        LastSyncError = null;
+    }
+
+    public void RecordSyncFailed(string error, DateTimeOffset now)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(error);
+        LastSyncAtUtc = now;
+        LastSyncStatus = "Failed";
+        LastSyncError = error.Trim();
+    }
+
+    private static string NormalizeFormat(string contentFormat)
+    {
+        var normalized = string.IsNullOrWhiteSpace(contentFormat)
+            ? SupplierFeedFormats.Csv
+            : contentFormat.Trim().ToLowerInvariant();
+        if (normalized is not (SupplierFeedFormats.Csv or SupplierFeedFormats.Json))
+        {
+            throw new InvalidOperationException("Feed format must be 'csv' or 'json'.");
+        }
+
+        return normalized;
     }
 }
 

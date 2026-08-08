@@ -18,4 +18,4 @@ Catalog products need a controlled path from supplier feeds without auto-publish
 
 ## Consequences
 
-Import never writes Active catalog state. Future adapters (HTTP supplier APIs) implement the same feed port. Publishing remains a later milestone.
+Import never writes Active catalog state. HTTP supplier APIs are covered in ADR 0018 via the same feed port and review queue. Publishing remains a separate concern.

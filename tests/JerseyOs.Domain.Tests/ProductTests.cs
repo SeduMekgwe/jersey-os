@@ -80,6 +80,22 @@ public sealed class ProductTests
     }
 
     [Fact]
+    public void SupplierHttpFeedRequiresAbsoluteUrl()
+    {
+        var supplier = new Supplier(Guid.NewGuid(), "Api", "api");
+        Assert.Throws<InvalidOperationException>(() =>
+            supplier.ConfigureHttpFeed("not-a-url", SupplierFeedFormats.Json, null, null));
+        supplier.ConfigureHttpFeed("https://feeds.example/catalog.json", SupplierFeedFormats.Json, "secret", "0 * * * *");
+        Assert.Equal(SupplierFeedKinds.Http, supplier.FeedKind);
+        Assert.Equal(SupplierFeedFormats.Json, supplier.FeedFormat);
+        Assert.Equal("https://feeds.example/catalog.json", supplier.FeedUrl);
+        Assert.Equal("secret", supplier.FeedBearerToken);
+        Assert.Equal("0 * * * *", supplier.SyncCron);
+        supplier.RecordSyncSucceeded(DateTimeOffset.UtcNow);
+        Assert.Equal("Succeeded", supplier.LastSyncStatus);
+    }
+
+    [Fact]
     public void ReleaseUpToAndCommitUpToClampToReserved()
     {
         var now = DateTimeOffset.UtcNow;

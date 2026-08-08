@@ -1,3 +1,4 @@
+using System.Net.Http.Headers;
 using Hangfire;
 using JerseyOs.Application;
 using JerseyOs.Domain;
@@ -15,6 +16,13 @@ public static class ImportModelBuilder
             b.ToTable("import_suppliers");
             b.Property(x => x.Name).HasMaxLength(200).IsRequired();
             b.Property(x => x.Code).HasMaxLength(64).IsRequired();
+            b.Property(x => x.FeedKind).HasMaxLength(32).IsRequired();
+            b.Property(x => x.FeedFormat).HasMaxLength(32).IsRequired();
+            b.Property(x => x.FeedUrl).HasMaxLength(1000);
+            b.Property(x => x.FeedBearerToken).HasMaxLength(2000);
+            b.Property(x => x.SyncCron).HasMaxLength(64);
+            b.Property(x => x.LastSyncStatus).HasMaxLength(32);
+            b.Property(x => x.LastSyncError).HasMaxLength(2000);
             b.HasIndex(x => new { x.OrganizationId, x.Code }).IsUnique();
             b.HasQueryFilter(x => x.OrganizationId == effectiveOrganizationId);
         });
@@ -54,22 +62,68 @@ public static class ImportModelBuilder
     }
 }
 
-public sealed class HangfireImportJobScheduler(IBackgroundJobClient jobs) : IImportJobScheduler
+public sealed class SupplierCatalogFeedRegistry(IEnumerable<ISupplierCatalogFeed> feeds) : ISupplierCatalogFeedResolver
+{
+    private readonly Dictionary<string, ISupplierCatalogFeed> _feeds = feeds
+        .ToDictionary(x => x.Format, StringComparer.OrdinalIgnoreCase);
+
+    public ISupplierCatalogFeed Resolve(string format)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(format);
+        if (_feeds.TryGetValue(format.Trim(), out var feed))
+        {
+            return feed;
+        }
+
+        throw new InvalidOperationException($"No supplier catalog feed is registered for format '{format}'.");
+    }
+}
+
+public sealed class HangfireImportJobScheduler(IBackgroundJobClient jobs, IRecurringJobManager recurring)
+    : IImportJobScheduler
 {
     public void EnqueueParse(Guid batchId) =>
         jobs.Enqueue<ParseImportBatchJob>(job => job.ExecuteAsync(batchId, CancellationToken.None));
+
+    public void EnqueueFetchSupplierFeed(Guid supplierId) =>
+        jobs.Enqueue<FetchSupplierFeedJob>(job => job.ExecuteAsync(supplierId, CancellationToken.None));
+
+    public void UpsertSupplierFeedSchedule(Guid organizationId, Guid supplierId, string? cronExpression)
+    {
+        var jobId = SupplierFeedSchedule.JobId(organizationId, supplierId);
+        if (string.IsNullOrWhiteSpace(cronExpression))
+        {
+            recurring.RemoveIfExists(jobId);
+            return;
+        }
+
+        recurring.AddOrUpdate<FetchSupplierFeedJob>(
+            jobId,
+            job => job.ExecuteAsync(supplierId, CancellationToken.None),
+            cronExpression.Trim());
+    }
+
+    public void RemoveSupplierFeedSchedule(Guid organizationId, Guid supplierId) =>
+        recurring.RemoveIfExists(SupplierFeedSchedule.JobId(organizationId, supplierId));
+}
+
+public static class SupplierFeedSchedule
+{
+    public static string JobId(Guid organizationId, Guid supplierId) =>
+        $"supplier-feed:{organizationId:N}:{supplierId:N}";
 }
 
 public sealed class ParseImportBatchJob(
     JerseyOsDbContext db,
     IObjectStorage storage,
-    ISupplierCatalogFeed feed)
+    ISupplierCatalogFeedResolver feedResolver)
 {
     [AutomaticRetry(Attempts = 3)]
     public async Task ExecuteAsync(Guid batchId, CancellationToken cancellationToken)
     {
         var batch = await db.ImportBatchesSet.IgnoreQueryFilters()
             .Include(x => x.Items)
+            .Include(x => x.Supplier)
             .SingleOrDefaultAsync(x => x.Id == batchId, cancellationToken)
             .ConfigureAwait(false);
         if (batch is null || batch.Status is ImportBatchStatus.ReadyForReview or ImportBatchStatus.Completed)
@@ -82,8 +136,14 @@ public sealed class ParseImportBatchJob(
             batch.MarkParsing();
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-            await using var stream = await OpenStoredFileAsync(storage, batch.ObjectKey, cancellationToken)
+            await using var stream = await storage.OpenReadAsync(batch.ObjectKey, cancellationToken)
                 .ConfigureAwait(false);
+            var format = ResolveFormat(
+                batch.ContentType,
+                batch.FileName,
+                batch.ObjectKey,
+                batch.Supplier?.FeedFormat);
+            var feed = feedResolver.Resolve(format);
             var rows = await feed.ParseAsync(stream, cancellationToken).ConfigureAwait(false);
             foreach (var row in rows)
             {
@@ -133,9 +193,98 @@ public sealed class ParseImportBatchJob(
         }
     }
 
-    private static Task<Stream> OpenStoredFileAsync(
-        IObjectStorage storage, string key, CancellationToken cancellationToken) =>
-        storage.OpenReadAsync(key, cancellationToken);
+    public static string ResolveFormat(
+        string contentType, string fileName, string objectKey, string? supplierFeedFormat)
+    {
+        if (!string.IsNullOrWhiteSpace(supplierFeedFormat))
+        {
+            return supplierFeedFormat.Trim().ToLowerInvariant();
+        }
+
+        if (contentType.Contains("json", StringComparison.OrdinalIgnoreCase)
+            || objectKey.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+            || fileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+        {
+            return SupplierFeedFormats.Json;
+        }
+
+        return SupplierFeedFormats.Csv;
+    }
+}
+
+public sealed class FetchSupplierFeedJob(
+    JerseyOsDbContext db,
+    IObjectStorage storage,
+    IHttpClientFactory httpClientFactory,
+    IImportJobScheduler jobs,
+    TimeProvider time)
+{
+    [AutomaticRetry(Attempts = 3)]
+    public async Task ExecuteAsync(Guid supplierId, CancellationToken cancellationToken)
+    {
+        var supplier = await db.SuppliersSet.IgnoreQueryFilters()
+            .SingleOrDefaultAsync(x => x.Id == supplierId, cancellationToken)
+            .ConfigureAwait(false);
+        if (supplier is null || supplier.FeedKind != SupplierFeedKinds.Http)
+        {
+            return;
+        }
+
+        var now = time.GetUtcNow();
+        try
+        {
+            if (string.IsNullOrWhiteSpace(supplier.FeedUrl))
+            {
+                throw new InvalidOperationException("Supplier feed URL is not configured.");
+            }
+
+            var client = httpClientFactory.CreateClient("import-feeds");
+            using var request = new HttpRequestMessage(HttpMethod.Get, supplier.FeedUrl);
+            if (!string.IsNullOrWhiteSpace(supplier.FeedBearerToken))
+            {
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", supplier.FeedBearerToken);
+            }
+
+            using var response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                throw new InvalidOperationException(
+                    $"Feed HTTP {(int)response.StatusCode}: {(body.Length > 300 ? body[..300] : body)}");
+            }
+
+            await using var remote = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            await using var buffer = new MemoryStream();
+            await remote.CopyToAsync(buffer, cancellationToken).ConfigureAwait(false);
+            buffer.Position = 0;
+
+            var extension = supplier.FeedFormat == SupplierFeedFormats.Json ? ".json" : ".csv";
+            var contentType = supplier.FeedFormat == SupplierFeedFormats.Json
+                ? "application/json"
+                : "text/csv";
+            var fileName = $"http-{supplier.Code}-{now:yyyyMMddHHmmss}{extension}";
+            var key = $"imports/{supplier.OrganizationId:N}/{Guid.NewGuid():N}{extension}";
+            await storage.PutAsync(key, buffer, contentType, cancellationToken).ConfigureAwait(false);
+
+            var batch = new ImportBatch(
+                supplier.OrganizationId,
+                supplier.Id,
+                fileName,
+                key,
+                contentType,
+                Guid.NewGuid().ToString("N"));
+            db.ImportBatchesSet.Add(batch);
+            supplier.RecordSyncSucceeded(now);
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            jobs.EnqueueParse(batch.Id);
+        }
+        catch (Exception exception)
+        {
+            supplier.RecordSyncFailed(exception.Message, now);
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            throw;
+        }
+    }
 }
 
 public static class ImportInfrastructureExtensions
@@ -143,12 +292,37 @@ public static class ImportInfrastructureExtensions
     public static IServiceCollection AddImportServices(this IServiceCollection services)
     {
         services.AddSingleton<ISupplierCatalogFeed, CsvSupplierCatalogFeed>();
+        services.AddSingleton<ISupplierCatalogFeed, JsonSupplierCatalogFeed>();
+        services.AddSingleton<ISupplierCatalogFeedResolver, SupplierCatalogFeedRegistry>();
         services.AddScoped<IImportJobScheduler, HangfireImportJobScheduler>();
         services.AddScoped<ParseImportBatchJob>();
+        services.AddScoped<FetchSupplierFeedJob>();
         services.AddHttpClient("import-images", client =>
         {
             client.Timeout = TimeSpan.FromSeconds(30);
         });
+        services.AddHttpClient("import-feeds", client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(60);
+        });
         return services;
+    }
+
+    public static void RegisterSupplierFeedRecurringJobs(this IServiceProvider services)
+    {
+        using var scope = services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<JerseyOsDbContext>();
+        var recurring = scope.ServiceProvider.GetRequiredService<IRecurringJobManager>();
+        var suppliers = db.SuppliersSet.IgnoreQueryFilters()
+            .Where(x => x.FeedKind == SupplierFeedKinds.Http && x.SyncCron != null && x.SyncCron != "")
+            .Select(x => new { x.OrganizationId, x.Id, x.SyncCron })
+            .ToList();
+        foreach (var supplier in suppliers)
+        {
+            recurring.AddOrUpdate<FetchSupplierFeedJob>(
+                SupplierFeedSchedule.JobId(supplier.OrganizationId, supplier.Id),
+                job => job.ExecuteAsync(supplier.Id, CancellationToken.None),
+                supplier.SyncCron!);
+        }
     }
 }

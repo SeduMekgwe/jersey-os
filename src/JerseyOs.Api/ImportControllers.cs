@@ -23,7 +23,46 @@ public sealed class ImportController(ISender sender) : ControllerBase
     [Authorize(Policy = Permissions.ImportUpload)]
     [ProducesResponseType<SupplierResponse>(StatusCodes.Status200OK)]
     public Task<SupplierResponse> CreateSupplier(CreateSupplierRequest request, CancellationToken cancellationToken) =>
-        sender.Send(new CreateSupplierCommand(request.Name, request.Code), cancellationToken);
+        sender.Send(
+            new CreateSupplierCommand(
+                request.Name,
+                request.Code,
+                request.FeedKind,
+                request.FeedFormat,
+                request.FeedUrl,
+                request.FeedBearerToken,
+                request.SyncCron),
+            cancellationToken);
+
+    [HttpPut("suppliers/{supplierId:guid}/feed")]
+    [Authorize(Policy = Permissions.ImportUpload)]
+    [ProducesResponseType<SupplierResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<SupplierResponse>> UpdateSupplierFeed(
+        Guid supplierId, UpdateSupplierFeedRequest request, CancellationToken cancellationToken)
+    {
+        var supplier = await sender.Send(
+            new UpdateSupplierFeedCommand(
+                supplierId,
+                request.FeedKind,
+                request.FeedFormat,
+                request.FeedUrl,
+                request.FeedBearerToken,
+                request.SyncCron),
+            cancellationToken);
+        return supplier is null ? NotFound() : Ok(supplier);
+    }
+
+    [HttpPost("suppliers/{supplierId:guid}/sync")]
+    [Authorize(Policy = Permissions.ImportUpload)]
+    [ProducesResponseType<SupplierResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<SupplierResponse>> SyncSupplierFeed(
+        Guid supplierId, CancellationToken cancellationToken)
+    {
+        var supplier = await sender.Send(new SyncSupplierFeedCommand(supplierId), cancellationToken);
+        return supplier is null ? NotFound() : Ok(supplier);
+    }
 
     [HttpGet("batches")]
     [ProducesResponseType<IReadOnlyCollection<ImportBatchSummaryResponse>>(StatusCodes.Status200OK)]

@@ -32,4 +32,5 @@ using (var scope = host.Services.CreateScope())
         pump => pump.EnqueuePendingAsync(CancellationToken.None),
         "*/1 * * * *");
 }
+host.Services.RegisterSupplierFeedRecurringJobs();
 await host.RunAsync();
