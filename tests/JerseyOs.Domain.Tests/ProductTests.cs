@@ -55,4 +55,27 @@ public sealed class ProductTests
         Assert.Equal(5, inventory.OnHand);
         Assert.Contains(inventory.DomainEvents, e => e is InventoryAdjusted);
     }
+
+    [Fact]
+    public void ReserveReleaseAndCommitInventory()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var inventory = new InventoryLevel(Guid.NewGuid(), Guid.NewGuid());
+        inventory.Adjust(10, "receive", now);
+
+        Assert.Throws<InvalidOperationException>(() => inventory.Reserve(11, "shopify-reserve", now));
+        inventory.Reserve(4, "shopify-reserve", now);
+        Assert.Equal(4, inventory.Reserved);
+        Assert.Equal(10, inventory.OnHand);
+
+        inventory.Release(1, "shopify-release", now);
+        Assert.Equal(3, inventory.Reserved);
+
+        inventory.Commit(2, "shopify-commit", now);
+        Assert.Equal(8, inventory.OnHand);
+        Assert.Equal(1, inventory.Reserved);
+
+        Assert.Throws<InvalidOperationException>(() => inventory.Commit(5, "shopify-commit", now));
+        Assert.Throws<InvalidOperationException>(() => inventory.Release(5, "shopify-release", now));
+    }
 }

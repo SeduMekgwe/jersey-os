@@ -9,6 +9,14 @@ public enum PublishRunStatus
     Failed = 2
 }
 
+public enum WebhookDeliveryStatus
+{
+    Pending = 0,
+    Succeeded = 1,
+    Failed = 2,
+    Ignored = 3
+}
+
 public static class PublishEntityTypes
 {
     public const string Product = "product";
@@ -112,5 +120,57 @@ public sealed class PublishRun : AuditableEntity, IOrganizationScoped
         Status = PublishRunStatus.Pending;
         Error = null;
         CompletedAtUtc = null;
+    }
+}
+
+public sealed class WebhookDelivery : AuditableEntity, IOrganizationScoped
+{
+    private WebhookDelivery() { }
+
+    public WebhookDelivery(
+        Guid organizationId,
+        string webhookId,
+        string topic,
+        string payloadJson)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(webhookId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(topic);
+        ArgumentException.ThrowIfNullOrWhiteSpace(payloadJson);
+        OrganizationId = organizationId;
+        WebhookId = webhookId.Trim();
+        Topic = topic.Trim().ToLowerInvariant();
+        PayloadJson = payloadJson;
+        Status = WebhookDeliveryStatus.Pending;
+    }
+
+    public Guid OrganizationId { get; private set; }
+    public string WebhookId { get; private set; } = string.Empty;
+    public string Topic { get; private set; } = string.Empty;
+    public string PayloadJson { get; private set; } = string.Empty;
+    public WebhookDeliveryStatus Status { get; private set; }
+    public string? Error { get; private set; }
+    public DateTimeOffset? ProcessedAtUtc { get; private set; }
+
+    public void MarkSucceeded(DateTimeOffset now)
+    {
+        Status = WebhookDeliveryStatus.Succeeded;
+        Error = null;
+        ProcessedAtUtc = now;
+    }
+
+    public void MarkFailed(string error, DateTimeOffset now)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(error);
+        Status = WebhookDeliveryStatus.Failed;
+        Error = error.Trim();
+        ProcessedAtUtc = now;
+    }
+
+    public void MarkIgnored(string reason, DateTimeOffset now)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        Status = WebhookDeliveryStatus.Ignored;
+        Error = reason.Trim();
+        ProcessedAtUtc = now;
     }
 }

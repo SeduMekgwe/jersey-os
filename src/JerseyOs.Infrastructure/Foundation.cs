@@ -105,6 +105,7 @@ public sealed class JerseyOsDbContext(
     public DbSet<SalesChannel> SalesChannelsSet => Set<SalesChannel>();
     public DbSet<ExternalIdMap> ExternalIdMapsSet => Set<ExternalIdMap>();
     public DbSet<PublishRun> PublishRunsSet => Set<PublishRun>();
+    public DbSet<WebhookDelivery> WebhookDeliveriesSet => Set<WebhookDelivery>();
 
     IQueryable<Organization> IApplicationDbContext.Organizations => OrganizationsSet;
     IQueryable<RefreshTokenSession> IApplicationDbContext.RefreshTokenSessions => RefreshTokenSessionsSet;
@@ -123,6 +124,7 @@ public sealed class JerseyOsDbContext(
     IQueryable<SalesChannel> IApplicationDbContext.SalesChannels => SalesChannelsSet;
     IQueryable<ExternalIdMap> IApplicationDbContext.ExternalIdMaps => ExternalIdMapsSet;
     IQueryable<PublishRun> IApplicationDbContext.PublishRuns => PublishRunsSet;
+    IQueryable<WebhookDelivery> IApplicationDbContext.WebhookDeliveries => WebhookDeliveriesSet;
 
     void IApplicationDbContext.Add<TEntity>(TEntity entity) => Set<TEntity>().Add(entity);
     void IApplicationDbContext.Remove<TEntity>(TEntity entity) => Set<TEntity>().Remove(entity);

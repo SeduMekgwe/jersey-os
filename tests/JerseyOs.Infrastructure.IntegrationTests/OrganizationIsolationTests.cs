@@ -222,5 +222,9 @@ public sealed class OrganizationIsolationTests : IAsyncLifetime
         public void EnqueueSyncInventory(Guid organizationId, Guid variantId)
         {
         }
+
+        public void EnqueueProcessWebhook(Guid deliveryId)
+        {
+        }
     }
 }

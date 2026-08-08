@@ -22,6 +22,7 @@ export type ImportBatchDetailDto = components['schemas']['ImportBatchDetailRespo
 export type ImportItemDto = components['schemas']['ImportItemResponse'];
 export type SalesChannelDto = components['schemas']['SalesChannelResponse'];
 export type PublishRunDto = components['schemas']['PublishRunResponse'];
+export type WebhookDeliveryDto = components['schemas']['WebhookDeliveryResponse'];
 
 export interface SessionDto {
   accessToken: components['schemas']['AuthResponse']['accessToken'];

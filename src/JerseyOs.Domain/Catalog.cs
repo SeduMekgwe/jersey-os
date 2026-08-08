@@ -413,6 +413,64 @@ public sealed class InventoryLevel : AuditableEntity, IOrganizationScoped
         OnHand = next;
         Raise(new InventoryAdjusted(VariantId, OrganizationId, deltaOnHand, OnHand, Reserved, reason.Trim(), now));
     }
+
+    public void Reserve(int quantity, string reason, DateTimeOffset now)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        if (quantity <= 0)
+        {
+            throw new InvalidOperationException("Reserve quantity must be positive.");
+        }
+
+        var available = OnHand - Reserved;
+        if (quantity > available)
+        {
+            throw new InvalidOperationException("Cannot reserve more than available inventory.");
+        }
+
+        Reserved += quantity;
+        Raise(new InventoryAdjusted(VariantId, OrganizationId, 0, OnHand, Reserved, reason.Trim(), now));
+    }
+
+    public void Release(int quantity, string reason, DateTimeOffset now)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        if (quantity <= 0)
+        {
+            throw new InvalidOperationException("Release quantity must be positive.");
+        }
+
+        if (quantity > Reserved)
+        {
+            throw new InvalidOperationException("Cannot release more than reserved inventory.");
+        }
+
+        Reserved -= quantity;
+        Raise(new InventoryAdjusted(VariantId, OrganizationId, 0, OnHand, Reserved, reason.Trim(), now));
+    }
+
+    public void Commit(int quantity, string reason, DateTimeOffset now)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        if (quantity <= 0)
+        {
+            throw new InvalidOperationException("Commit quantity must be positive.");
+        }
+
+        if (quantity > Reserved)
+        {
+            throw new InvalidOperationException("Cannot commit more than reserved inventory.");
+        }
+
+        if (quantity > OnHand)
+        {
+            throw new InvalidOperationException("Cannot commit more than on-hand inventory.");
+        }
+
+        OnHand -= quantity;
+        Reserved -= quantity;
+        Raise(new InventoryAdjusted(VariantId, OrganizationId, -quantity, OnHand, Reserved, reason.Trim(), now));
+    }
 }
 
 public sealed class ProductImage : AuditableEntity, IOrganizationScoped

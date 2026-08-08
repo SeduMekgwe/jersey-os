@@ -41,6 +41,12 @@ public interface IPublishingJobScheduler
 {
     void EnqueuePublishProduct(Guid organizationId, Guid productId, bool unpublish);
     void EnqueueSyncInventory(Guid organizationId, Guid variantId);
+    void EnqueueProcessWebhook(Guid deliveryId);
+}
+
+public interface IShopifyWebhookHmac
+{
+    bool IsValid(string rawBody, string? hmacHeader);
 }
 
 public sealed record ListSalesChannelsQuery : IRequest<IReadOnlyCollection<SalesChannelResponse>>;
@@ -48,6 +54,12 @@ public sealed record ListPublishRunsQuery(Guid? ProductId = null) : IRequest<IRe
 public sealed record SetChannelEnabledCommand(Guid ChannelId, bool Enabled) : IRequest<SalesChannelResponse?>;
 public sealed record RepublishProductCommand(Guid ProductId) : IRequest<PublishRunResponse?>;
 public sealed record GetProductPublishRunsQuery(Guid ProductId) : IRequest<IReadOnlyCollection<PublishRunResponse>>;
+public sealed record ListWebhookDeliveriesQuery : IRequest<IReadOnlyCollection<WebhookDeliveryResponse>>;
+public sealed record IngestShopifyWebhookCommand(
+    Guid OrganizationId,
+    string WebhookId,
+    string Topic,
+    string PayloadJson) : IRequest<Guid?>;
 
 public sealed class SetChannelEnabledValidator : AbstractValidator<SetChannelEnabledCommand>
 {
@@ -175,6 +187,57 @@ public sealed class RepublishProductHandler(
     }
 }
 
+public sealed class ListWebhookDeliveriesHandler(IApplicationDbContext db)
+    : IRequestHandler<ListWebhookDeliveriesQuery, IReadOnlyCollection<WebhookDeliveryResponse>>
+{
+    public async Task<IReadOnlyCollection<WebhookDeliveryResponse>> Handle(
+        ListWebhookDeliveriesQuery request, CancellationToken cancellationToken)
+    {
+        var deliveries = await db.WebhookDeliveries.AsNoTracking()
+            .OrderByDescending(x => x.CreatedAtUtc)
+            .Take(100)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return deliveries.Select(PublishingMapping.ToResponse).ToArray();
+    }
+}
+
+public sealed class IngestShopifyWebhookHandler(
+    IApplicationDbContext db,
+    IPublishingJobScheduler jobs) : IRequestHandler<IngestShopifyWebhookCommand, Guid?>
+{
+    public async Task<Guid?> Handle(IngestShopifyWebhookCommand request, CancellationToken cancellationToken)
+    {
+        if (request.OrganizationId == Guid.Empty ||
+            string.IsNullOrWhiteSpace(request.WebhookId) ||
+            string.IsNullOrWhiteSpace(request.Topic))
+        {
+            return null;
+        }
+
+        var existing = await db.WebhookDeliveries
+            .AsNoTracking()
+            .AnyAsync(
+                x => x.OrganizationId == request.OrganizationId && x.WebhookId == request.WebhookId,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (existing)
+        {
+            return Guid.Empty;
+        }
+
+        var delivery = new WebhookDelivery(
+            request.OrganizationId,
+            request.WebhookId,
+            request.Topic,
+            request.PayloadJson);
+        db.Add(delivery);
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        jobs.EnqueueProcessWebhook(delivery.Id);
+        return delivery.Id;
+    }
+}
+
 public static class PublishingMapping
 {
     public static SalesChannelResponse ToResponse(SalesChannel channel) =>
@@ -190,4 +253,15 @@ public static class PublishingMapping
             run.Error,
             run.CompletedAtUtc,
             run.ModifiedAtUtc);
+
+    public static WebhookDeliveryResponse ToResponse(WebhookDelivery delivery) =>
+        new(
+            delivery.Id,
+            delivery.WebhookId,
+            delivery.Topic,
+            delivery.Status.ToString(),
+            delivery.Error,
+            delivery.ProcessedAtUtc,
+            delivery.CreatedAtUtc);
 }
+

@@ -244,5 +244,9 @@ public sealed class PublishingIntegrationTests : IAsyncLifetime
 
         public void EnqueueSyncInventory(Guid organizationId, Guid variantId) =>
             InventoryCalls.Add((organizationId, variantId));
+
+        public void EnqueueProcessWebhook(Guid deliveryId)
+        {
+        }
     }
 }

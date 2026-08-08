@@ -28,6 +28,7 @@ Configuration is loaded from `appsettings*.json`, environment variables, and an 
 | `Shopify__ShopDomain` | Shopify shop hostname (e.g. `demo.myshopify.com`) | No | Hosted when publishing |
 | `Shopify__AccessToken` | Admin API access token; empty selects null publisher | Yes | Hosted when publishing |
 | `Shopify__ApiVersion` | Admin GraphQL API version | No | Hosted when publishing |
+| `Shopify__WebhookSecret` | HMAC secret for inbound order webhooks | Yes | Hosted when publishing |
 
 ## Rules
 

@@ -18,6 +18,7 @@ public sealed class ShopifyOptions
     public string ShopDomain { get; set; } = string.Empty;
     public string AccessToken { get; set; } = string.Empty;
     public string ApiVersion { get; set; } = "2025-01";
+    public string WebhookSecret { get; set; } = string.Empty;
 }
 
 public static class PublishingModelBuilder
@@ -49,6 +50,18 @@ public static class PublishingModelBuilder
             b.Property(x => x.Error).HasMaxLength(2000);
             b.HasIndex(x => new { x.OrganizationId, x.ChannelId, x.ProductId }).IsUnique();
             b.HasOne(x => x.Channel).WithMany().HasForeignKey(x => x.ChannelId).OnDelete(DeleteBehavior.Restrict);
+            b.HasQueryFilter(x => x.OrganizationId == effectiveOrganizationId);
+        });
+        builder.Entity<WebhookDelivery>(b =>
+        {
+            b.ToTable("publish_webhook_deliveries");
+            b.Property(x => x.WebhookId).HasMaxLength(128).IsRequired();
+            b.Property(x => x.Topic).HasMaxLength(128).IsRequired();
+            b.Property(x => x.PayloadJson).HasColumnType("nvarchar(max)").IsRequired();
+            b.Property(x => x.Status).HasConversion<string>().HasMaxLength(32);
+            b.Property(x => x.Error).HasMaxLength(2000);
+            b.HasIndex(x => new { x.OrganizationId, x.WebhookId }).IsUnique();
+            b.HasIndex(x => new { x.OrganizationId, x.CreatedAtUtc });
             b.HasQueryFilter(x => x.OrganizationId == effectiveOrganizationId);
         });
     }
@@ -348,6 +361,10 @@ public sealed class HangfirePublishingJobScheduler(IBackgroundJobClient jobs) : 
     public void EnqueueSyncInventory(Guid organizationId, Guid variantId) =>
         jobs.Enqueue<SyncInventoryJob>(job =>
             job.ExecuteAsync(organizationId, variantId, CancellationToken.None));
+
+    public void EnqueueProcessWebhook(Guid deliveryId) =>
+        jobs.Enqueue<ProcessShopifyWebhookJob>(job =>
+            job.ExecuteAsync(deliveryId, CancellationToken.None));
 }
 
 public sealed class PublishProductJob(
@@ -624,8 +641,10 @@ public static class PublishingInfrastructureExtensions
                 : sp.GetRequiredService<ShopifySalesChannelPublisher>();
         });
         services.AddScoped<IPublishingJobScheduler, HangfirePublishingJobScheduler>();
+        services.AddSingleton<IShopifyWebhookHmac, ShopifyWebhookHmac>();
         services.AddScoped<PublishProductJob>();
         services.AddScoped<SyncInventoryJob>();
+        services.AddScoped<ProcessShopifyWebhookJob>();
         return services;
     }
 }

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '@/auth/auth-context';
 import { Button, Card } from '@/components/ui';
 import { apiRequest } from '@/lib/api';
-import type { PublishRunDto, SalesChannelDto } from '@/types/api';
+import type { PublishRunDto, SalesChannelDto, WebhookDeliveryDto } from '@/types/api';
 
 export function PublishingPage() {
   const queryClient = useQueryClient();
@@ -17,6 +17,10 @@ export function PublishingPage() {
   const runsQuery = useQuery({
     queryKey: ['publishing', 'runs'],
     queryFn: () => apiRequest<PublishRunDto[]>('/publishing/runs'),
+  });
+  const deliveriesQuery = useQuery({
+    queryKey: ['publishing', 'webhook-deliveries'],
+    queryFn: () => apiRequest<WebhookDeliveryDto[]>('/publishing/webhook-deliveries'),
   });
 
   const toggleMutation = useMutation({
@@ -88,6 +92,26 @@ export function PublishingPage() {
         ))}
         {runsQuery.isSuccess && runsQuery.data.length === 0 && (
           <p className="text-sm text-muted-foreground">No publish runs yet.</p>
+        )}
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-lg font-medium">Shopify webhook deliveries</h2>
+        {(deliveriesQuery.data ?? []).map((delivery) => (
+          <Card key={delivery.id} className="space-y-1 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="font-medium">{delivery.topic}</p>
+              <span className="text-sm text-muted-foreground">{delivery.status}</span>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {delivery.webhookId}
+              {` · ${new Date(delivery.createdAtUtc).toLocaleString()}`}
+            </p>
+            {delivery.error && <p className="text-sm text-destructive">{delivery.error}</p>}
+          </Card>
+        ))}
+        {deliveriesQuery.isSuccess && deliveriesQuery.data.length === 0 && (
+          <p className="text-sm text-muted-foreground">No webhook deliveries yet.</p>
         )}
       </section>
     </div>

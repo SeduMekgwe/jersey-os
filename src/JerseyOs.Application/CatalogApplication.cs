@@ -25,6 +25,7 @@ public interface IApplicationDbContext
     IQueryable<SalesChannel> SalesChannels { get; }
     IQueryable<ExternalIdMap> ExternalIdMaps { get; }
     IQueryable<PublishRun> PublishRuns { get; }
+    IQueryable<WebhookDelivery> WebhookDeliveries { get; }
 
     void Add<TEntity>(TEntity entity) where TEntity : class;
     void Remove<TEntity>(TEntity entity) where TEntity : class;

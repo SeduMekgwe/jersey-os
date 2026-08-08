@@ -129,4 +129,4 @@ erDiagram
   SALES_CHANNEL ||--o{ PUBLISH_RUN : tracks
 ```
 
-`ExternalIdMap` keys on `(organization_id, channel_id, entity_type, local_id)`. `PublishRun` tracks the latest attempt per product/channel (`Pending` | `Succeeded` | `Failed`).
+`ExternalIdMap` keys on `(organization_id, channel_id, entity_type, local_id)`. `PublishRun` tracks the latest attempt per product/channel (`Pending` | `Succeeded` | `Failed`). `WebhookDelivery` stores idempotent Shopify webhook payloads (`Pending` | `Succeeded` | `Failed` | `Ignored`) keyed by `(organization_id, webhook_id)`.

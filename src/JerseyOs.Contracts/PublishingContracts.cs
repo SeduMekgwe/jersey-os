@@ -11,3 +11,11 @@ public sealed record PublishRunResponse(
     DateTimeOffset? CompletedAtUtc,
     DateTimeOffset ModifiedAtUtc);
 public sealed record SetChannelEnabledRequest(bool Enabled);
+public sealed record WebhookDeliveryResponse(
+    Guid Id,
+    string WebhookId,
+    string Topic,
+    string Status,
+    string? Error,
+    DateTimeOffset? ProcessedAtUtc,
+    DateTimeOffset CreatedAtUtc);
