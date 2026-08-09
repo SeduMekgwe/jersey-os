@@ -104,7 +104,15 @@ public sealed class CatalogController(ISender sender) : ControllerBase
         Guid productId, UpsertVariantRequest request, CancellationToken cancellationToken)
     {
         var product = await sender.Send(
-            new UpsertVariantCommand(productId, request.Id, request.Sku, request.Size, request.SortOrder, request.PriceAmount),
+            new UpsertVariantCommand(
+                productId,
+                request.Id,
+                request.Sku,
+                request.Size,
+                request.SortOrder,
+                request.PriceAmount,
+                request.CostAmount,
+                request.CompareAtAmount),
             cancellationToken);
         return product is null ? NotFound() : Ok(product);
     }
@@ -246,6 +254,77 @@ public sealed class CatalogController(ISender sender) : ControllerBase
         var item = await sender.Send(new UpdateTagCommand(id, request.Name, request.Slug), cancellationToken);
         return item is null ? NotFound() : Ok(item);
     }
+}
+
+[ApiController]
+[ApiVersion(1.0)]
+[Authorize(Policy = Permissions.PricingRead)]
+[Route("api/v{version:apiVersion}/catalog/pricing-rules")]
+public sealed class PricingRulesController(ISender sender) : ControllerBase
+{
+    [HttpGet]
+    [ProducesResponseType<IReadOnlyCollection<PricingRuleResponse>>(StatusCodes.Status200OK)]
+    public Task<IReadOnlyCollection<PricingRuleResponse>> List(CancellationToken cancellationToken) =>
+        sender.Send(new ListPricingRulesQuery(), cancellationToken);
+
+    [HttpPost]
+    [Authorize(Policy = Permissions.PricingWrite)]
+    [ProducesResponseType<PricingRuleResponse>(StatusCodes.Status201Created)]
+    public async Task<ActionResult<PricingRuleResponse>> Create(
+        CreatePricingRuleRequest request, CancellationToken cancellationToken)
+    {
+        var rule = await sender.Send(
+            new CreatePricingRuleCommand(
+                request.Name,
+                request.Kind,
+                request.PercentRate,
+                request.Priority,
+                request.SalesChannelId,
+                request.IsEnabled),
+            cancellationToken);
+        return CreatedAtAction(nameof(List), new { version = "1.0" }, rule);
+    }
+
+    [HttpPut("{ruleId:guid}")]
+    [Authorize(Policy = Permissions.PricingWrite)]
+    [ProducesResponseType<PricingRuleResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<PricingRuleResponse>> Update(
+        Guid ruleId, UpdatePricingRuleRequest request, CancellationToken cancellationToken)
+    {
+        var rule = await sender.Send(
+            new UpdatePricingRuleCommand(
+                ruleId,
+                request.Name,
+                request.Kind,
+                request.PercentRate,
+                request.Priority,
+                request.SalesChannelId,
+                request.IsEnabled),
+            cancellationToken);
+        return rule is null ? NotFound() : Ok(rule);
+    }
+
+    [HttpDelete("{ruleId:guid}")]
+    [Authorize(Policy = Permissions.PricingWrite)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Delete(Guid ruleId, CancellationToken cancellationToken)
+    {
+        var deleted = await sender.Send(new DeletePricingRuleCommand(ruleId), cancellationToken);
+        return deleted ? NoContent() : NotFound();
+    }
+
+    [HttpPost("preview")]
+    [ProducesResponseType<PricePreviewResponse>(StatusCodes.Status200OK)]
+    public Task<PricePreviewResponse> Preview(PricePreviewRequest request, CancellationToken cancellationToken) =>
+        sender.Send(
+            new PreviewPricingCommand(
+                request.CostAmount,
+                request.ExplicitPriceAmount,
+                request.ExplicitCompareAtAmount,
+                request.SalesChannelId),
+            cancellationToken);
 }
 
 [ApiController]

@@ -46,7 +46,7 @@ public sealed class WooCommerceSalesChannelPublisherTests
                 "Arsenal",
                 "2025-26",
                 ["https://cdn.example/kit.jpg"],
-                [new PublishVariantInput(variantId, "HOME-M", "M", 3, 1299.00m, "ZAR", null)],
+                [new PublishVariantInput(variantId, "HOME-M", "M", 3, 1299.00m, null, "ZAR", null)],
                 null),
             CancellationToken.None);
 

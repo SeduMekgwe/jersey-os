@@ -47,6 +47,8 @@ public static class Permissions
     public const string SystemHealthRead = "system.health.read";
     public const string CatalogRead = "catalog.read";
     public const string CatalogWrite = "catalog.write";
+    public const string PricingRead = "pricing.read";
+    public const string PricingWrite = "pricing.write";
     public const string InventoryAdjust = "inventory.adjust";
     public const string ImportRead = "import.read";
     public const string ImportUpload = "import.upload";
@@ -60,6 +62,8 @@ public static class Permissions
         SystemHealthRead,
         CatalogRead,
         CatalogWrite,
+        PricingRead,
+        PricingWrite,
         InventoryAdjust,
         ImportRead,
         ImportUpload,
@@ -103,6 +107,7 @@ public sealed class JerseyOsDbContext(
     public DbSet<ImportBatch> ImportBatchesSet => Set<ImportBatch>();
     public DbSet<ImportItem> ImportItemsSet => Set<ImportItem>();
     public DbSet<SupplierScrapeRun> SupplierScrapeRunsSet => Set<SupplierScrapeRun>();
+    public DbSet<PricingRule> PricingRulesSet => Set<PricingRule>();
     public DbSet<SalesChannel> SalesChannelsSet => Set<SalesChannel>();
     public DbSet<ExternalIdMap> ExternalIdMapsSet => Set<ExternalIdMap>();
     public DbSet<PublishRun> PublishRunsSet => Set<PublishRun>();
@@ -123,6 +128,7 @@ public sealed class JerseyOsDbContext(
     IQueryable<ImportBatch> IApplicationDbContext.ImportBatches => ImportBatchesSet;
     IQueryable<ImportItem> IApplicationDbContext.ImportItems => ImportItemsSet;
     IQueryable<SupplierScrapeRun> IApplicationDbContext.SupplierScrapeRuns => SupplierScrapeRunsSet;
+    IQueryable<PricingRule> IApplicationDbContext.PricingRules => PricingRulesSet;
     IQueryable<SalesChannel> IApplicationDbContext.SalesChannels => SalesChannelsSet;
     IQueryable<ExternalIdMap> IApplicationDbContext.ExternalIdMaps => ExternalIdMapsSet;
     IQueryable<PublishRun> IApplicationDbContext.PublishRuns => PublishRunsSet;
@@ -616,6 +622,8 @@ public static class DependencyInjection
                 .AddPolicy(Permissions.SystemHealthRead, p => p.RequireClaim("permission", Permissions.SystemHealthRead))
                 .AddPolicy(Permissions.CatalogRead, p => p.RequireClaim("permission", Permissions.CatalogRead))
                 .AddPolicy(Permissions.CatalogWrite, p => p.RequireClaim("permission", Permissions.CatalogWrite))
+                .AddPolicy(Permissions.PricingRead, p => p.RequireClaim("permission", Permissions.PricingRead))
+                .AddPolicy(Permissions.PricingWrite, p => p.RequireClaim("permission", Permissions.PricingWrite))
                 .AddPolicy(Permissions.InventoryAdjust, p => p.RequireClaim("permission", Permissions.InventoryAdjust))
                 .AddPolicy(Permissions.ImportRead, p => p.RequireClaim("permission", Permissions.ImportRead))
                 .AddPolicy(Permissions.ImportUpload, p => p.RequireClaim("permission", Permissions.ImportUpload))

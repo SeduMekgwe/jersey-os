@@ -212,7 +212,9 @@ public sealed class Product : AuditableEntity, IOrganizationScoped
         string size,
         int sortOrder,
         DateTimeOffset now,
-        decimal? priceAmount = null)
+        decimal? priceAmount = null,
+        decimal? costAmount = null,
+        decimal? compareAtAmount = null)
     {
         EnsureNotArchived();
         ArgumentException.ThrowIfNullOrWhiteSpace(sku);
@@ -236,6 +238,16 @@ public sealed class Product : AuditableEntity, IOrganizationScoped
         if (priceAmount is not null)
         {
             variant.SetPrice(priceAmount);
+        }
+
+        if (costAmount is not null)
+        {
+            variant.SetCost(costAmount);
+        }
+
+        if (compareAtAmount is not null)
+        {
+            variant.SetCompareAt(compareAtAmount);
         }
 
         if (Status == ProductStatus.Active && variant.PriceAmount is null or <= 0)
@@ -358,6 +370,8 @@ public sealed class ProductVariant : AuditableEntity, IOrganizationScoped
     public string Size { get; private set; } = string.Empty;
     public int SortOrder { get; private set; }
     public decimal? PriceAmount { get; private set; }
+    public decimal? CostAmount { get; private set; }
+    public decimal? CompareAtAmount { get; private set; }
     public Product Product { get; private set; } = null!;
     public InventoryLevel Inventory { get; private set; } = null!;
 
@@ -376,6 +390,26 @@ public sealed class ProductVariant : AuditableEntity, IOrganizationScoped
         }
 
         PriceAmount = priceAmount;
+    }
+
+    public void SetCost(decimal? costAmount)
+    {
+        if (costAmount is < 0)
+        {
+            throw new InvalidOperationException("Cost cannot be negative.");
+        }
+
+        CostAmount = costAmount;
+    }
+
+    public void SetCompareAt(decimal? compareAtAmount)
+    {
+        if (compareAtAmount is < 0)
+        {
+            throw new InvalidOperationException("Compare-at price cannot be negative.");
+        }
+
+        CompareAtAmount = compareAtAmount;
     }
 }
 

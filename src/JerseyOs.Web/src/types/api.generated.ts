@@ -210,6 +210,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/catalog/pricing-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List organization pricing rules */
+        get: operations["listPricingRules"];
+        put?: never;
+        /** Create a pricing rule */
+        post: operations["createPricingRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/catalog/pricing-rules/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview resolved sell and compare-at prices */
+        post: operations["previewPricing"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/catalog/pricing-rules/{ruleId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update a pricing rule */
+        put: operations["updatePricingRule"];
+        post?: never;
+        /** Delete a pricing rule */
+        delete: operations["deletePricingRule"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/catalog/products/{productId}/images": {
         parameters: {
             query?: never;
@@ -737,6 +790,10 @@ export interface components {
             sortOrder: number;
             /** Format: decimal */
             priceAmount?: number | null;
+            /** Format: decimal */
+            costAmount?: number | null;
+            /** Format: decimal */
+            compareAtAmount?: number | null;
             inventory: components["schemas"]["InventoryResponse"];
         };
         ProductImageResponse: {
@@ -814,6 +871,66 @@ export interface components {
             sortOrder: number;
             /** Format: decimal */
             priceAmount?: number | null;
+            /** Format: decimal */
+            costAmount?: number | null;
+            /** Format: decimal */
+            compareAtAmount?: number | null;
+        };
+        PricingRuleResponse: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @enum {string} */
+            kind: "MarkupPercent" | "MarginPercent" | "CompareAtPercent";
+            /** Format: decimal */
+            percentRate: number;
+            /** Format: uuid */
+            salesChannelId?: string | null;
+            priority: number;
+            isEnabled: boolean;
+        };
+        CreatePricingRuleRequest: {
+            name: string;
+            /** @enum {string} */
+            kind: "MarkupPercent" | "MarginPercent" | "CompareAtPercent";
+            /** Format: decimal */
+            percentRate: number;
+            priority: number;
+            /** Format: uuid */
+            salesChannelId?: string | null;
+            /** @default true */
+            isEnabled: boolean;
+        };
+        UpdatePricingRuleRequest: {
+            name: string;
+            /** @enum {string} */
+            kind: "MarkupPercent" | "MarginPercent" | "CompareAtPercent";
+            /** Format: decimal */
+            percentRate: number;
+            priority: number;
+            /** Format: uuid */
+            salesChannelId?: string | null;
+            isEnabled: boolean;
+        };
+        PricePreviewRequest: {
+            /** Format: decimal */
+            costAmount?: number | null;
+            /** Format: decimal */
+            explicitPriceAmount?: number | null;
+            /** Format: decimal */
+            explicitCompareAtAmount?: number | null;
+            /** Format: uuid */
+            salesChannelId?: string | null;
+        };
+        PricePreviewResponse: {
+            /** Format: decimal */
+            priceAmount?: number | null;
+            /** Format: decimal */
+            compareAtAmount?: number | null;
+            /** Format: uuid */
+            sellRuleId?: string | null;
+            /** Format: uuid */
+            compareAtRuleId?: string | null;
         };
         ImageSortOrder: {
             /** Format: uuid */
@@ -1463,6 +1580,134 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ProductResponse"];
                 };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listPricingRules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pricing rules */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PricingRuleResponse"][];
+                };
+            };
+        };
+    };
+    createPricingRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePricingRuleRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PricingRuleResponse"];
+                };
+            };
+        };
+    };
+    previewPricing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PricePreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Resolved prices */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PricePreviewResponse"];
+                };
+            };
+        };
+    };
+    updatePricingRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ruleId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePricingRuleRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PricingRuleResponse"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    deletePricingRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ruleId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Not found */
             404: {

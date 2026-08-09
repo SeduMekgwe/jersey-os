@@ -608,8 +608,16 @@ public static class ImportApply
                 .Include(x => x.Tags)
                 .SingleAsync(x => x.Id == productId, cancellationToken);
             product.UpdateDetails(item.Name, item.Slug, item.StyleCode, teamId, seasonId, now);
+            var priced = await ResolveImportPricingAsync(db, item.RawJson, cancellationToken);
             variant = product.UpsertVariant(
-                item.MatchedVariantId, item.Sku, item.Size, 0, now, ReadPriceAmount(item.RawJson));
+                item.MatchedVariantId,
+                item.Sku,
+                item.Size,
+                0,
+                now,
+                priced.PriceAmount,
+                priced.CostAmount,
+                priced.CompareAtAmount);
         }
         else
         {
@@ -642,8 +650,16 @@ public static class ImportApply
                 product.UpdateDetails(item.Name, item.Slug, item.StyleCode, teamId, seasonId, now);
             }
 
+            var priced = await ResolveImportPricingAsync(db, item.RawJson, cancellationToken);
             variant = product.UpsertVariant(
-                null, item.Sku, item.Size, product.Variants.Count, now, ReadPriceAmount(item.RawJson));
+                null,
+                item.Sku,
+                item.Size,
+                product.Variants.Count,
+                now,
+                priced.PriceAmount,
+                priced.CostAmount,
+                priced.CompareAtAmount);
         }
 
         if (item.Quantity is > 0)
@@ -664,7 +680,27 @@ public static class ImportApply
         item.Batch.RefreshCompletion();
     }
 
-    private static decimal? ReadPriceAmount(string rawJson)
+    private static async Task<(decimal? PriceAmount, decimal? CostAmount, decimal? CompareAtAmount)> ResolveImportPricingAsync(
+        IApplicationDbContext db,
+        string rawJson,
+        CancellationToken cancellationToken)
+    {
+        var cost = ReadMoneyAmount(rawJson, "cost", "cost_amount", "Cost", "CostAmount");
+        var explicitPrice = ReadMoneyAmount(rawJson, "price", "price_amount", "Price", "PriceAmount");
+        var explicitCompareAt = ReadMoneyAmount(
+            rawJson, "compare_at", "compare_at_amount", "CompareAt", "CompareAtAmount");
+        var rules = await db.PricingRules.AsNoTracking().ToListAsync(cancellationToken).ConfigureAwait(false);
+        var resolved = PricingCalculator.ResolveForCatalog(cost, explicitPrice, explicitCompareAt, rules);
+        return (
+            resolved.PriceAmount ?? explicitPrice,
+            cost,
+            resolved.CompareAtAmount ?? explicitCompareAt);
+    }
+
+    private static decimal? ReadPriceAmount(string rawJson) =>
+        ReadMoneyAmount(rawJson, "price", "price_amount", "Price", "PriceAmount");
+
+    private static decimal? ReadMoneyAmount(string rawJson, params string[] names)
     {
         try
         {
@@ -674,7 +710,7 @@ public static class ImportApply
                 return null;
             }
 
-            foreach (var name in new[] { "price", "price_amount", "Price", "PriceAmount" })
+            foreach (var name in names)
             {
                 if (!document.RootElement.TryGetProperty(name, out var value))
                 {
@@ -696,7 +732,7 @@ public static class ImportApply
         }
         catch (JsonException)
         {
-            // Ignore malformed import payload; price stays unset.
+            // Ignore malformed import payload; money stays unset.
         }
 
         return null;

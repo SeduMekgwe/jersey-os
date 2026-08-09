@@ -33,6 +33,8 @@ export function ProductDetailPage() {
   const [sku, setSku] = useState('');
   const [size, setSize] = useState('M');
   const [priceAmount, setPriceAmount] = useState('');
+  const [costAmount, setCostAmount] = useState('');
+  const [compareAtAmount, setCompareAtAmount] = useState('');
   const [delta, setDelta] = useState('1');
   const [reason, setReason] = useState('manual adjust');
   const [error, setError] = useState<string | null>(null);
@@ -354,6 +356,7 @@ export function ProductDetailPage() {
                       : ' · no price'}
                   </p>
                   <p className="text-sm text-muted-foreground">
+                    Cost {variant.costAmount ?? '—'} · Compare-at {variant.compareAtAmount ?? '—'} ·
                     On hand {variant.inventory.onHand} · Reserved {variant.inventory.reserved}
                   </p>
                 </div>
@@ -379,7 +382,7 @@ export function ProductDetailPage() {
               </div>
             ))}
             {canWrite && (
-              <div className="grid gap-3 md:grid-cols-4">
+              <div className="grid gap-3 md:grid-cols-3">
                 <Input
                   placeholder="SKU"
                   value={sku}
@@ -402,21 +405,45 @@ export function ProductDetailPage() {
                     setPriceAmount(e.target.value);
                   }}
                 />
+                <Input
+                  placeholder={`Cost (${product.currency})`}
+                  value={costAmount}
+                  inputMode="decimal"
+                  onChange={(e) => {
+                    setCostAmount(e.target.value);
+                  }}
+                />
+                <Input
+                  placeholder={`Compare-at (${product.currency})`}
+                  value={compareAtAmount}
+                  inputMode="decimal"
+                  onChange={(e) => {
+                    setCompareAtAmount(e.target.value);
+                  }}
+                />
                 <Button
                   onClick={() => {
                     setError(null);
-                    const parsed =
-                      priceAmount.trim() === '' ? null : Number(priceAmount);
-                    if (parsed !== null && (Number.isNaN(parsed) || parsed < 0)) {
-                      setError('Price must be a non-negative number.');
-                      return;
+                    const parseMoney = (value: string) => {
+                      if (value.trim() === '') return null;
+                      const parsed = Number(value);
+                      if (Number.isNaN(parsed) || parsed < 0) {
+                        throw new Error('Money fields must be non-negative numbers.');
+                      }
+                      return parsed;
+                    };
+                    try {
+                      variantMutation.mutate({
+                        sku,
+                        size,
+                        sortOrder: product.variants.length,
+                        priceAmount: parseMoney(priceAmount),
+                        costAmount: parseMoney(costAmount),
+                        compareAtAmount: parseMoney(compareAtAmount),
+                      });
+                    } catch (err) {
+                      setError(err instanceof Error ? err.message : 'Invalid variant values.');
                     }
-                    variantMutation.mutate({
-                      sku,
-                      size,
-                      sortOrder: product.variants.length,
-                      priceAmount: parsed,
-                    });
                   }}
                 >
                   Add variant

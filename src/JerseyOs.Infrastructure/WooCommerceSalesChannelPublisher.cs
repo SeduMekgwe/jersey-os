@@ -78,10 +78,12 @@ public sealed class WooCommerceSalesChannelPublisher(
         {
             var price = variant.PriceAmount ?? throw new InvalidOperationException(
                 $"Variant {variant.Sku} is missing a price for WooCommerce publish.");
+            var compareAt = variant.CompareAtAmount;
+            var regular = compareAt is > 0 && compareAt > price ? compareAt.Value : price;
             var variationBody = new Dictionary<string, object?>
             {
                 ["sku"] = variant.Sku,
-                ["regular_price"] = price.ToString("0.00", CultureInfo.InvariantCulture),
+                ["regular_price"] = regular.ToString("0.00", CultureInfo.InvariantCulture),
                 ["manage_stock"] = true,
                 ["stock_quantity"] = variant.AvailableQuantity,
                 ["attributes"] = new object[]
@@ -93,6 +95,10 @@ public sealed class WooCommerceSalesChannelPublisher(
                     }
                 }
             };
+            if (compareAt is > 0 && compareAt > price)
+            {
+                variationBody["sale_price"] = price.ToString("0.00", CultureInfo.InvariantCulture);
+            }
 
             JsonElement variation;
             if (TryParseCompositeVariantId(variant.ExternalVariantId, out var existingProductId, out var existingVariationId)

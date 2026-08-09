@@ -11,6 +11,8 @@ public sealed record ProductVariantResponse(
     string Size,
     int SortOrder,
     decimal? PriceAmount,
+    decimal? CostAmount,
+    decimal? CompareAtAmount,
     InventoryResponse Inventory);
 public sealed record ProductImageResponse(
     Guid Id,
@@ -63,7 +65,47 @@ public sealed record UpdateProductRequest(
     Guid? SeasonId,
     IReadOnlyCollection<Guid>? CategoryIds,
     IReadOnlyCollection<Guid>? TagIds);
-public sealed record UpsertVariantRequest(Guid? Id, string Sku, string Size, int SortOrder, decimal? PriceAmount);
+public sealed record UpsertVariantRequest(
+    Guid? Id,
+    string Sku,
+    string Size,
+    int SortOrder,
+    decimal? PriceAmount,
+    decimal? CostAmount = null,
+    decimal? CompareAtAmount = null);
 public sealed record ReorderImagesRequest(IReadOnlyCollection<ImageSortOrder> Items);
 public sealed record ImageSortOrder(Guid ImageId, int SortOrder);
 public sealed record AdjustInventoryRequest(int DeltaOnHand, string Reason, string? ExpectedRowVersion);
+
+public sealed record PricingRuleResponse(
+    Guid Id,
+    string Name,
+    string Kind,
+    decimal PercentRate,
+    Guid? SalesChannelId,
+    int Priority,
+    bool IsEnabled);
+public sealed record CreatePricingRuleRequest(
+    string Name,
+    string Kind,
+    decimal PercentRate,
+    int Priority,
+    Guid? SalesChannelId,
+    bool IsEnabled = true);
+public sealed record UpdatePricingRuleRequest(
+    string Name,
+    string Kind,
+    decimal PercentRate,
+    int Priority,
+    Guid? SalesChannelId,
+    bool IsEnabled);
+public sealed record PricePreviewRequest(
+    decimal? CostAmount,
+    decimal? ExplicitPriceAmount,
+    decimal? ExplicitCompareAtAmount,
+    Guid? SalesChannelId);
+public sealed record PricePreviewResponse(
+    decimal? PriceAmount,
+    decimal? CompareAtAmount,
+    Guid? SellRuleId,
+    Guid? CompareAtRuleId);

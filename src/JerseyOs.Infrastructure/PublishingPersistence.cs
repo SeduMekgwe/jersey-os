@@ -120,6 +120,12 @@ public sealed class ShopifySalesChannelPublisher(
                 payload["price"] = price.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
             }
 
+            if (v.CompareAtAmount is { } compareAt)
+            {
+                payload["compareAtPrice"] = compareAt.ToString(
+                    "0.00", System.Globalization.CultureInfo.InvariantCulture);
+            }
+
             return payload;
         }).ToArray();
 
@@ -481,7 +487,23 @@ public sealed class PublishProductJob(
                 currency = "ZAR";
             }
 
-            if (product.Variants.Any(v => v.PriceAmount is null or <= 0))
+            var pricingRules = await db.PricingRulesSet.AsNoTracking().IgnoreQueryFilters()
+                .Where(x => x.OrganizationId == organizationId)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            var resolvedVariants = product.Variants.OrderBy(v => v.SortOrder).Select(v =>
+            {
+                var resolved = PricingCalculator.ResolveForPublish(
+                    v.CostAmount,
+                    v.PriceAmount,
+                    v.CompareAtAmount,
+                    pricingRules,
+                    channel.Id);
+                return (Variant: v, Resolved: resolved);
+            }).ToArray();
+
+            if (resolvedVariants.Any(x => x.Resolved.PriceAmount is null or <= 0))
             {
                 throw new InvalidOperationException("Active products require a price on every variant before publish.");
             }
@@ -494,16 +516,17 @@ public sealed class PublishProductJob(
                 product.Team?.Name,
                 product.Season?.Name,
                 product.Images.OrderBy(i => i.SortOrder).Select(i => storage.GetUrl(i.ObjectKey)).ToArray(),
-                product.Variants.OrderBy(v => v.SortOrder).Select(v =>
+                resolvedVariants.Select(x =>
                 {
-                    variantMaps.TryGetValue(v.Id, out var map);
-                    var available = Math.Max(0, v.Inventory.OnHand - v.Inventory.Reserved);
+                    variantMaps.TryGetValue(x.Variant.Id, out var map);
+                    var available = Math.Max(0, x.Variant.Inventory.OnHand - x.Variant.Inventory.Reserved);
                     return new PublishVariantInput(
-                        v.Id,
-                        v.Sku,
-                        v.Size,
+                        x.Variant.Id,
+                        x.Variant.Sku,
+                        x.Variant.Size,
                         available,
-                        v.PriceAmount,
+                        x.Resolved.PriceAmount,
+                        x.Resolved.CompareAtAmount,
                         currency,
                         map?.ExternalId);
                 }).ToArray(),

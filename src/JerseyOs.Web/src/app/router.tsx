@@ -7,6 +7,7 @@ import { ImportBatchesPage } from '@/pages/import-batches';
 import { LoginPage } from '@/pages/login';
 import { ProductDetailPage } from '@/pages/product-detail';
 import { ProductsListPage } from '@/pages/products-list';
+import { PricingPage } from '@/pages/pricing';
 import { PublishingPage } from '@/pages/publishing';
 import { NotFoundPage, UnauthorizedPage } from '@/pages/status-pages';
 import { SystemHealthPage } from '@/pages/system-health';
@@ -33,6 +34,10 @@ export const router = createBrowserRouter([
               { path: 'products/:productId', element: <ProductDetailPage /> },
               { path: 'taxonomy', element: <TaxonomyPage /> },
             ],
+          },
+          {
+            element: <RequirePermission permission="pricing.read" />,
+            children: [{ path: 'pricing', element: <PricingPage /> }],
           },
           {
             element: <RequirePermission permission="import.read" />,

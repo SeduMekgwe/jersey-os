@@ -154,6 +154,8 @@ public static class CatalogModelBuilder
             b.Property(x => x.Sku).HasMaxLength(64).IsRequired();
             b.Property(x => x.Size).HasMaxLength(32).IsRequired();
             b.Property(x => x.PriceAmount).HasPrecision(18, 2);
+            b.Property(x => x.CostAmount).HasPrecision(18, 2);
+            b.Property(x => x.CompareAtAmount).HasPrecision(18, 2);
             b.HasIndex(x => new { x.OrganizationId, x.Sku }).IsUnique();
             b.HasOne(x => x.Inventory).WithOne(x => x.Variant)
                 .HasForeignKey<InventoryLevel>(x => x.VariantId)
@@ -188,6 +190,16 @@ public static class CatalogModelBuilder
             b.ToTable("catalog_product_tags");
             b.HasIndex(x => new { x.ProductId, x.TagId }).IsUnique();
             b.HasOne(x => x.Tag).WithMany().HasForeignKey(x => x.TagId).OnDelete(DeleteBehavior.Restrict);
+            b.HasQueryFilter(x => x.OrganizationId == effectiveOrganizationId);
+        });
+        builder.Entity<PricingRule>(b =>
+        {
+            b.ToTable("catalog_pricing_rules");
+            b.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            b.Property(x => x.Kind).HasConversion<string>().HasMaxLength(32);
+            b.Property(x => x.PercentRate).HasPrecision(18, 4);
+            b.HasIndex(x => new { x.OrganizationId, x.Name });
+            b.HasIndex(x => new { x.OrganizationId, x.SalesChannelId, x.Kind, x.Priority });
             b.HasQueryFilter(x => x.OrganizationId == effectiveOrganizationId);
         });
     }

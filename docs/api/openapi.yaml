@@ -288,6 +288,104 @@ paths:
                 $ref: '#/components/schemas/ProductResponse'
         '404':
           description: Not found
+  /catalog/pricing-rules:
+    get:
+      operationId: listPricingRules
+      tags: [Catalog]
+      summary: List organization pricing rules
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Pricing rules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PricingRuleResponse'
+    post:
+      operationId: createPricingRule
+      tags: [Catalog]
+      summary: Create a pricing rule
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePricingRuleRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PricingRuleResponse'
+  /catalog/pricing-rules/preview:
+    post:
+      operationId: previewPricing
+      tags: [Catalog]
+      summary: Preview resolved sell and compare-at prices
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PricePreviewRequest'
+      responses:
+        '200':
+          description: Resolved prices
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PricePreviewResponse'
+  /catalog/pricing-rules/{ruleId}:
+    put:
+      operationId: updatePricingRule
+      tags: [Catalog]
+      summary: Update a pricing rule
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: ruleId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePricingRuleRequest'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PricingRuleResponse'
+        '404':
+          description: Not found
+    delete:
+      operationId: deletePricingRule
+      tags: [Catalog]
+      summary: Delete a pricing rule
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: ruleId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Not found
   /catalog/products/{productId}/images:
     post:
       operationId: attachProductImage
@@ -1082,6 +1180,8 @@ components:
         size: { type: string }
         sortOrder: { type: integer }
         priceAmount: { type: number, format: decimal, nullable: true }
+        costAmount: { type: number, format: decimal, nullable: true }
+        compareAtAmount: { type: number, format: decimal, nullable: true }
         inventory:
           $ref: '#/components/schemas/InventoryResponse'
     ProductImageResponse:
@@ -1182,6 +1282,59 @@ components:
         size: { type: string }
         sortOrder: { type: integer }
         priceAmount: { type: number, format: decimal, nullable: true }
+        costAmount: { type: number, format: decimal, nullable: true }
+        compareAtAmount: { type: number, format: decimal, nullable: true }
+    PricingRuleResponse:
+      type: object
+      required: [id, name, kind, percentRate, priority, isEnabled]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        kind:
+          type: string
+          enum: [MarkupPercent, MarginPercent, CompareAtPercent]
+        percentRate: { type: number, format: decimal }
+        salesChannelId: { type: string, format: uuid, nullable: true }
+        priority: { type: integer }
+        isEnabled: { type: boolean }
+    CreatePricingRuleRequest:
+      type: object
+      required: [name, kind, percentRate, priority]
+      properties:
+        name: { type: string }
+        kind:
+          type: string
+          enum: [MarkupPercent, MarginPercent, CompareAtPercent]
+        percentRate: { type: number, format: decimal }
+        priority: { type: integer }
+        salesChannelId: { type: string, format: uuid, nullable: true }
+        isEnabled: { type: boolean, default: true }
+    UpdatePricingRuleRequest:
+      type: object
+      required: [name, kind, percentRate, priority, isEnabled]
+      properties:
+        name: { type: string }
+        kind:
+          type: string
+          enum: [MarkupPercent, MarginPercent, CompareAtPercent]
+        percentRate: { type: number, format: decimal }
+        priority: { type: integer }
+        salesChannelId: { type: string, format: uuid, nullable: true }
+        isEnabled: { type: boolean }
+    PricePreviewRequest:
+      type: object
+      properties:
+        costAmount: { type: number, format: decimal, nullable: true }
+        explicitPriceAmount: { type: number, format: decimal, nullable: true }
+        explicitCompareAtAmount: { type: number, format: decimal, nullable: true }
+        salesChannelId: { type: string, format: uuid, nullable: true }
+    PricePreviewResponse:
+      type: object
+      properties:
+        priceAmount: { type: number, format: decimal, nullable: true }
+        compareAtAmount: { type: number, format: decimal, nullable: true }
+        sellRuleId: { type: string, format: uuid, nullable: true }
+        compareAtRuleId: { type: string, format: uuid, nullable: true }
     ImageSortOrder:
       type: object
       required: [imageId, sortOrder]

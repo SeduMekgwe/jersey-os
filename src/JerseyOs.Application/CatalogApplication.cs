@@ -23,6 +23,7 @@ public interface IApplicationDbContext
     IQueryable<ImportBatch> ImportBatches { get; }
     IQueryable<ImportItem> ImportItems { get; }
     IQueryable<SupplierScrapeRun> SupplierScrapeRuns { get; }
+    IQueryable<PricingRule> PricingRules { get; }
     IQueryable<SalesChannel> SalesChannels { get; }
     IQueryable<ExternalIdMap> ExternalIdMaps { get; }
     IQueryable<PublishRun> PublishRuns { get; }
@@ -55,6 +56,8 @@ public static class CatalogMapping
                     v.Size,
                     v.SortOrder,
                     v.PriceAmount,
+                    v.CostAmount,
+                    v.CompareAtAmount,
                     new InventoryResponse(
                         v.Inventory.VariantId,
                         v.Inventory.OnHand,
@@ -127,7 +130,9 @@ public sealed record UpsertVariantCommand(
     string Sku,
     string Size,
     int SortOrder,
-    decimal? PriceAmount) : IRequest<ProductResponse?>;
+    decimal? PriceAmount,
+    decimal? CostAmount = null,
+    decimal? CompareAtAmount = null) : IRequest<ProductResponse?>;
 
 public sealed record RemoveVariantCommand(Guid ProductId, Guid VariantId) : IRequest<ProductResponse?>;
 public sealed record AdjustInventoryCommand(
@@ -192,6 +197,8 @@ public sealed class UpsertVariantValidator : AbstractValidator<UpsertVariantComm
         RuleFor(x => x.Sku).NotEmpty().MaximumLength(64);
         RuleFor(x => x.Size).NotEmpty().MaximumLength(32);
         RuleFor(x => x.PriceAmount).GreaterThanOrEqualTo(0).When(x => x.PriceAmount is not null);
+        RuleFor(x => x.CostAmount).GreaterThanOrEqualTo(0).When(x => x.CostAmount is not null);
+        RuleFor(x => x.CompareAtAmount).GreaterThanOrEqualTo(0).When(x => x.CompareAtAmount is not null);
     }
 }
 
@@ -400,13 +407,22 @@ public sealed class UpsertVariantHandler(
             throw new InvalidOperationException($"SKU '{sku}' is already in use.");
         }
 
+        var rules = await db.PricingRules.AsNoTracking().ToListAsync(cancellationToken).ConfigureAwait(false);
+        var resolved = PricingCalculator.ResolveForCatalog(
+            request.CostAmount,
+            request.PriceAmount,
+            request.CompareAtAmount,
+            rules);
+
         product.UpsertVariant(
             request.VariantId,
             request.Sku,
             request.Size,
             request.SortOrder,
             time.GetUtcNow(),
-            request.PriceAmount);
+            resolved.PriceAmount ?? request.PriceAmount,
+            request.CostAmount,
+            resolved.CompareAtAmount ?? request.CompareAtAmount);
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return await CatalogMapping.ToResponseAsync(product, storage, db, cancellationToken).ConfigureAwait(false);
     }

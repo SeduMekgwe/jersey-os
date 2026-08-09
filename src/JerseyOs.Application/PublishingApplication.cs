@@ -12,6 +12,7 @@ public sealed record PublishVariantInput(
     string Size,
     int AvailableQuantity,
     decimal? PriceAmount,
+    decimal? CompareAtAmount,
     string CurrencyCode,
     string? ExternalVariantId);
 
