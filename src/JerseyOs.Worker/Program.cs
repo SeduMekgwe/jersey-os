@@ -11,7 +11,11 @@ using Serilog;
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddSingleton<ICurrentRequest, WorkerCurrentRequest>();
 builder.Services.AddInfrastructure(builder.Configuration);
-builder.Services.AddHangfireServer(options => options.WorkerCount = 2);
+builder.Services.AddHangfireServer(options =>
+{
+    options.WorkerCount = 2;
+    options.Queues = ["default", "scrape"];
+});
 builder.Services.AddOpenTelemetry()
     .ConfigureResource(r => r.AddService("JerseyOs.Worker"))
     .WithTracing(t => t.AddHttpClientInstrumentation().AddOtlpExporter())

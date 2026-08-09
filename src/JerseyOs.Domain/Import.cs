@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using JerseyOs.SharedKernel;
 
 namespace JerseyOs.Domain;
@@ -30,6 +32,15 @@ public static class SupplierFeedKinds
 {
     public const string Upload = "upload";
     public const string Http = "http";
+    public const string Scrape = "scrape";
+}
+
+public enum SupplierScrapeRunStatus
+{
+    Pending = 0,
+    Running = 1,
+    Succeeded = 2,
+    Failed = 3
 }
 
 public static class SupplierFeedFormats
@@ -57,6 +68,9 @@ public sealed class Supplier : AuditableEntity, IOrganizationScoped
     public string FeedFormat { get; private set; } = SupplierFeedFormats.Csv;
     public string? FeedUrl { get; private set; }
     public string? FeedBearerToken { get; private set; }
+    public string? ScrapeProfileJson { get; private set; }
+    public string? ScrapeUsername { get; private set; }
+    public string? ScrapePassword { get; private set; }
     public string? SyncCron { get; private set; }
     public DateTimeOffset? LastSyncAtUtc { get; private set; }
     public string? LastSyncStatus { get; private set; }
@@ -76,6 +90,9 @@ public sealed class Supplier : AuditableEntity, IOrganizationScoped
         FeedFormat = NormalizeFormat(contentFormat);
         FeedUrl = null;
         FeedBearerToken = null;
+        ScrapeProfileJson = null;
+        ScrapeUsername = null;
+        ScrapePassword = null;
         SyncCron = null;
     }
 
@@ -96,6 +113,37 @@ public sealed class Supplier : AuditableEntity, IOrganizationScoped
         FeedUrl = uri.ToString();
         FeedFormat = NormalizeFormat(contentFormat);
         FeedBearerToken = string.IsNullOrWhiteSpace(bearerToken) ? null : bearerToken.Trim();
+        ScrapeProfileJson = null;
+        ScrapeUsername = null;
+        ScrapePassword = null;
+        SyncCron = string.IsNullOrWhiteSpace(syncCron) ? null : syncCron.Trim();
+    }
+
+    public void ConfigureScrapeFeed(
+        string startUrl,
+        string scrapeProfileJson,
+        string? username,
+        string? password,
+        string? syncCron)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(startUrl);
+        ArgumentException.ThrowIfNullOrWhiteSpace(scrapeProfileJson);
+        if (!Uri.TryCreate(startUrl.Trim(), UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            throw new InvalidOperationException("Scrape start URL must be an absolute http(s) URL.");
+        }
+
+        // Validate JSON shape early.
+        _ = SupplierScrapeProfile.Parse(scrapeProfileJson);
+
+        FeedKind = SupplierFeedKinds.Scrape;
+        FeedUrl = uri.ToString();
+        FeedFormat = SupplierFeedFormats.Json;
+        FeedBearerToken = null;
+        ScrapeProfileJson = scrapeProfileJson.Trim();
+        ScrapeUsername = string.IsNullOrWhiteSpace(username) ? null : username.Trim();
+        ScrapePassword = string.IsNullOrWhiteSpace(password) ? null : password.Trim();
         SyncCron = string.IsNullOrWhiteSpace(syncCron) ? null : syncCron.Trim();
     }
 
@@ -125,6 +173,145 @@ public sealed class Supplier : AuditableEntity, IOrganizationScoped
         }
 
         return normalized;
+    }
+}
+
+/// <summary>
+/// Selector profile for Playwright supplier scrapes. Operators must respect site terms/robots.
+/// </summary>
+public sealed class SupplierScrapeProfile
+{
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+
+    public string? StartUrl { get; set; }
+    public SupplierScrapeLoginProfile? Login { get; set; }
+    public SupplierScrapeListProfile List { get; set; } = new();
+    public SupplierScrapeProductSelectors Product { get; set; } = new();
+    public int MaxProducts { get; set; } = 50;
+    public int MaxListPages { get; set; } = 5;
+    public int NavigationDelayMs { get; set; } = 500;
+
+    public static SupplierScrapeProfile Parse(string json)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(json);
+        SupplierScrapeProfile? profile;
+        try
+        {
+            profile = JsonSerializer.Deserialize<SupplierScrapeProfile>(json, JsonOptions);
+        }
+        catch (JsonException exception)
+        {
+            throw new InvalidOperationException($"Scrape profile JSON is invalid: {exception.Message}");
+        }
+
+        if (profile is null)
+        {
+            throw new InvalidOperationException("Scrape profile JSON is empty.");
+        }
+
+        if (string.IsNullOrWhiteSpace(profile.List.ItemLinkSelector))
+        {
+            throw new InvalidOperationException("Scrape profile requires list.itemLinkSelector.");
+        }
+
+        if (string.IsNullOrWhiteSpace(profile.Product.NameSelector)
+            || string.IsNullOrWhiteSpace(profile.Product.SkuSelector)
+            || string.IsNullOrWhiteSpace(profile.Product.SizeSelector))
+        {
+            throw new InvalidOperationException("Scrape profile requires product name, sku, and size selectors.");
+        }
+
+        if (profile.MaxProducts is < 1 or > 500)
+        {
+            throw new InvalidOperationException("Scrape profile maxProducts must be between 1 and 500.");
+        }
+
+        if (profile.NavigationDelayMs is < 0 or > 30_000)
+        {
+            throw new InvalidOperationException("Scrape profile navigationDelayMs must be between 0 and 30000.");
+        }
+
+        return profile;
+    }
+}
+
+public sealed class SupplierScrapeLoginProfile
+{
+    public string? Url { get; set; }
+    public string? UsernameSelector { get; set; }
+    public string? PasswordSelector { get; set; }
+    public string? SubmitSelector { get; set; }
+}
+
+public sealed class SupplierScrapeListProfile
+{
+    public string ItemLinkSelector { get; set; } = string.Empty;
+    public string? NextPageSelector { get; set; }
+}
+
+public sealed class SupplierScrapeProductSelectors
+{
+    public string NameSelector { get; set; } = string.Empty;
+    public string SkuSelector { get; set; } = string.Empty;
+    public string SizeSelector { get; set; } = string.Empty;
+    public string? StyleCodeSelector { get; set; }
+    public string? TeamSelector { get; set; }
+    public string? SeasonSelector { get; set; }
+    public string? QuantitySelector { get; set; }
+    public string? PriceSelector { get; set; }
+    public string? ImageSelector { get; set; }
+}
+
+public sealed class SupplierScrapeRun : AuditableEntity, IOrganizationScoped
+{
+    private SupplierScrapeRun() { }
+
+    public SupplierScrapeRun(Guid organizationId, Guid supplierId, string correlationId)
+    {
+        OrganizationId = organizationId;
+        SupplierId = supplierId;
+        CorrelationId = string.IsNullOrWhiteSpace(correlationId) ? Guid.NewGuid().ToString("N") : correlationId.Trim();
+        Status = SupplierScrapeRunStatus.Pending;
+    }
+
+    public Guid OrganizationId { get; private set; }
+    public Guid SupplierId { get; private set; }
+    public SupplierScrapeRunStatus Status { get; private set; }
+    public string CorrelationId { get; private set; } = string.Empty;
+    public DateTimeOffset? StartedAtUtc { get; private set; }
+    public DateTimeOffset? CompletedAtUtc { get; private set; }
+    public int ProductsScraped { get; private set; }
+    public Guid? ImportBatchId { get; private set; }
+    public string? Error { get; private set; }
+    public Supplier Supplier { get; private set; } = null!;
+
+    public void MarkRunning(DateTimeOffset now)
+    {
+        Status = SupplierScrapeRunStatus.Running;
+        StartedAtUtc = now;
+        Error = null;
+    }
+
+    public void MarkSucceeded(int productsScraped, Guid importBatchId, DateTimeOffset now)
+    {
+        Status = SupplierScrapeRunStatus.Succeeded;
+        ProductsScraped = productsScraped;
+        ImportBatchId = importBatchId;
+        CompletedAtUtc = now;
+        Error = null;
+    }
+
+    public void MarkFailed(string error, DateTimeOffset now)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(error);
+        Status = SupplierScrapeRunStatus.Failed;
+        Error = error.Trim();
+        CompletedAtUtc = now;
     }
 }
 

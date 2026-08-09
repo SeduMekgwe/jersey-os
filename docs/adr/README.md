@@ -20,4 +20,5 @@ ADRs are immutable decision history. Supersede an accepted ADR with a new ADR; d
 - [0016 — WooCommerce and multi-channel publishing](0016-woocommerce-multichannel-publishing.md)
 - [0017 — Shopify refunds and partial fulfillments](0017-shopify-refunds-partial-fulfillments.md)
 - [0018 — HTTP supplier feeds](0018-http-supplier-feeds.md)
+- [0019 — Playwright supplier scrape intake](0019-playwright-supplier-scrape.md)
 - [Template](template.md)

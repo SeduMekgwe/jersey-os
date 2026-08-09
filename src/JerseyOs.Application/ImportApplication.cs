@@ -37,7 +37,7 @@ public interface ISupplierCatalogFeedResolver
 public interface IImportJobScheduler
 {
     void EnqueueParse(Guid batchId);
-    void EnqueueFetchSupplierFeed(Guid supplierId);
+    void EnqueueSyncSupplierFeed(Guid supplierId);
     void UpsertSupplierFeedSchedule(Guid organizationId, Guid supplierId, string? cronExpression);
     void RemoveSupplierFeedSchedule(Guid organizationId, Guid supplierId);
 }
@@ -59,6 +59,9 @@ public sealed record CreateSupplierCommand(
     string? FeedFormat,
     string? FeedUrl,
     string? FeedBearerToken,
+    string? ScrapeProfileJson,
+    string? ScrapeUsername,
+    string? ScrapePassword,
     string? SyncCron) : IRequest<SupplierResponse>;
 
 public sealed record UpdateSupplierFeedCommand(
@@ -67,10 +70,15 @@ public sealed record UpdateSupplierFeedCommand(
     string FeedFormat,
     string? FeedUrl,
     string? FeedBearerToken,
+    string? ScrapeProfileJson,
+    string? ScrapeUsername,
+    string? ScrapePassword,
     string? SyncCron) : IRequest<SupplierResponse?>;
 
 public sealed record SyncSupplierFeedCommand(Guid SupplierId) : IRequest<SupplierResponse?>;
 public sealed record ListSuppliersQuery : IRequest<IReadOnlyCollection<SupplierResponse>>;
+public sealed record ListSupplierScrapeRunsQuery(Guid SupplierId)
+    : IRequest<IReadOnlyCollection<SupplierScrapeRunResponse>>;
 public sealed record UploadImportBatchCommand(
     Guid SupplierId,
     Stream Content,
@@ -152,10 +160,13 @@ public sealed class CreateSupplierHandler(
             request.FeedFormat,
             request.FeedUrl,
             request.FeedBearerToken,
+            request.ScrapeProfileJson,
+            request.ScrapeUsername,
+            request.ScrapePassword,
             request.SyncCron);
         db.Add(supplier);
         await db.SaveChangesAsync(cancellationToken);
-        jobs.UpsertSupplierFeedSchedule(orgId, supplier.Id, supplier.FeedKind == SupplierFeedKinds.Http ? supplier.SyncCron : null);
+        SupplierFeedConfiguration.RefreshSchedule(jobs, supplier);
         return ImportMapping.ToSupplierResponse(supplier);
     }
 }
@@ -178,17 +189,12 @@ public sealed class UpdateSupplierFeedHandler(
             request.FeedFormat,
             request.FeedUrl,
             request.FeedBearerToken,
+            request.ScrapeProfileJson,
+            request.ScrapeUsername,
+            request.ScrapePassword,
             request.SyncCron);
         await db.SaveChangesAsync(cancellationToken);
-        if (supplier.FeedKind == SupplierFeedKinds.Http && !string.IsNullOrWhiteSpace(supplier.SyncCron))
-        {
-            jobs.UpsertSupplierFeedSchedule(supplier.OrganizationId, supplier.Id, supplier.SyncCron);
-        }
-        else
-        {
-            jobs.RemoveSupplierFeedSchedule(supplier.OrganizationId, supplier.Id);
-        }
-
+        SupplierFeedConfiguration.RefreshSchedule(jobs, supplier);
         return ImportMapping.ToSupplierResponse(supplier);
     }
 }
@@ -202,13 +208,29 @@ public sealed class SyncSupplierFeedHandler(
     {
         var supplier = await db.Suppliers.AsNoTracking()
             .SingleOrDefaultAsync(x => x.Id == request.SupplierId, cancellationToken);
-        if (supplier is null || supplier.FeedKind != SupplierFeedKinds.Http)
+        if (supplier is null
+            || (supplier.FeedKind != SupplierFeedKinds.Http && supplier.FeedKind != SupplierFeedKinds.Scrape))
         {
             return null;
         }
 
-        jobs.EnqueueFetchSupplierFeed(supplier.Id);
+        jobs.EnqueueSyncSupplierFeed(supplier.Id);
         return ImportMapping.ToSupplierResponse(supplier);
+    }
+}
+
+public sealed class ListSupplierScrapeRunsHandler(IApplicationDbContext db)
+    : IRequestHandler<ListSupplierScrapeRunsQuery, IReadOnlyCollection<SupplierScrapeRunResponse>>
+{
+    public async Task<IReadOnlyCollection<SupplierScrapeRunResponse>> Handle(
+        ListSupplierScrapeRunsQuery request, CancellationToken cancellationToken)
+    {
+        var runs = await db.SupplierScrapeRuns.AsNoTracking()
+            .Where(x => x.SupplierId == request.SupplierId)
+            .OrderByDescending(x => x.CreatedAtUtc)
+            .Take(50)
+            .ToArrayAsync(cancellationToken);
+        return runs.Select(ImportMapping.ToScrapeRunResponse).ToArray();
     }
 }
 
@@ -231,6 +253,9 @@ internal static class SupplierFeedConfiguration
         string? feedFormat,
         string? feedUrl,
         string? feedBearerToken,
+        string? scrapeProfileJson,
+        string? scrapeUsername,
+        string? scrapePassword,
         string? syncCron)
     {
         var kind = string.IsNullOrWhiteSpace(feedKind)
@@ -247,12 +272,35 @@ internal static class SupplierFeedConfiguration
             return;
         }
 
+        if (kind == SupplierFeedKinds.Scrape)
+        {
+            supplier.ConfigureScrapeFeed(
+                feedUrl ?? throw new InvalidOperationException("Scrape suppliers require a start URL."),
+                scrapeProfileJson ?? throw new InvalidOperationException("Scrape suppliers require a profile JSON."),
+                scrapeUsername,
+                scrapePassword,
+                syncCron);
+            return;
+        }
+
         if (kind != SupplierFeedKinds.Upload)
         {
-            throw new InvalidOperationException("Feed kind must be 'upload' or 'http'.");
+            throw new InvalidOperationException("Feed kind must be 'upload', 'http', or 'scrape'.");
         }
 
         supplier.ConfigureUploadFeed(format);
+    }
+
+    public static void RefreshSchedule(IImportJobScheduler jobs, Supplier supplier)
+    {
+        if ((supplier.FeedKind is SupplierFeedKinds.Http or SupplierFeedKinds.Scrape)
+            && !string.IsNullOrWhiteSpace(supplier.SyncCron))
+        {
+            jobs.UpsertSupplierFeedSchedule(supplier.OrganizationId, supplier.Id, supplier.SyncCron);
+            return;
+        }
+
+        jobs.RemoveSupplierFeedSchedule(supplier.OrganizationId, supplier.Id);
     }
 }
 
@@ -442,10 +490,26 @@ public static class ImportMapping
             supplier.FeedFormat,
             supplier.FeedUrl,
             !string.IsNullOrWhiteSpace(supplier.FeedBearerToken),
+            supplier.ScrapeProfileJson,
+            !string.IsNullOrWhiteSpace(supplier.ScrapeUsername)
+            || !string.IsNullOrWhiteSpace(supplier.ScrapePassword),
             supplier.SyncCron,
             supplier.LastSyncAtUtc,
             supplier.LastSyncStatus,
             supplier.LastSyncError);
+
+    public static SupplierScrapeRunResponse ToScrapeRunResponse(SupplierScrapeRun run) =>
+        new(
+            run.Id,
+            run.SupplierId,
+            run.Status.ToString(),
+            run.CorrelationId,
+            run.StartedAtUtc,
+            run.CompletedAtUtc,
+            run.ProductsScraped,
+            run.ImportBatchId,
+            run.Error,
+            run.CreatedAtUtc);
 
     public static ImportItemResponse ToItem(ImportItem item) =>
         new(

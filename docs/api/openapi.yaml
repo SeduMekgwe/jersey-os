@@ -680,6 +680,25 @@ paths:
                 $ref: '#/components/schemas/SupplierResponse'
         '404':
           description: Not found
+  /import/suppliers/{supplierId}/scrape-runs:
+    get:
+      operationId: listSupplierScrapeRuns
+      tags: [Import]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: supplierId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Scrape run history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SupplierScrapeRunResponse'
   /import/batches:
     get:
       operationId: listImportBatches
@@ -1186,7 +1205,7 @@ components:
         expectedRowVersion: { type: string, nullable: true }
     SupplierResponse:
       type: object
-      required: [id, name, code, feedKind, feedFormat, hasFeedAuth]
+      required: [id, name, code, feedKind, feedFormat, hasFeedAuth, hasScrapeCredentials]
       properties:
         id: { type: string, format: uuid }
         name: { type: string }
@@ -1195,6 +1214,8 @@ components:
         feedFormat: { type: string }
         feedUrl: { type: string, nullable: true }
         hasFeedAuth: { type: boolean }
+        scrapeProfileJson: { type: string, nullable: true }
+        hasScrapeCredentials: { type: boolean }
         syncCron: { type: string, nullable: true }
         lastSyncAtUtc: { type: string, format: date-time, nullable: true }
         lastSyncStatus: { type: string, nullable: true }
@@ -1209,6 +1230,9 @@ components:
         feedFormat: { type: string, nullable: true }
         feedUrl: { type: string, nullable: true }
         feedBearerToken: { type: string, nullable: true }
+        scrapeProfileJson: { type: string, nullable: true }
+        scrapeUsername: { type: string, nullable: true }
+        scrapePassword: { type: string, nullable: true }
         syncCron: { type: string, nullable: true }
     UpdateSupplierFeedRequest:
       type: object
@@ -1218,7 +1242,24 @@ components:
         feedFormat: { type: string }
         feedUrl: { type: string, nullable: true }
         feedBearerToken: { type: string, nullable: true }
+        scrapeProfileJson: { type: string, nullable: true }
+        scrapeUsername: { type: string, nullable: true }
+        scrapePassword: { type: string, nullable: true }
         syncCron: { type: string, nullable: true }
+    SupplierScrapeRunResponse:
+      type: object
+      required: [id, supplierId, status, correlationId, productsScraped, createdAtUtc]
+      properties:
+        id: { type: string, format: uuid }
+        supplierId: { type: string, format: uuid }
+        status: { type: string }
+        correlationId: { type: string }
+        startedAtUtc: { type: string, format: date-time, nullable: true }
+        completedAtUtc: { type: string, format: date-time, nullable: true }
+        productsScraped: { type: integer }
+        importBatchId: { type: string, format: uuid, nullable: true }
+        error: { type: string, nullable: true }
+        createdAtUtc: { type: string, format: date-time }
     ImportBatchSummaryResponse:
       type: object
       required: [id, supplierId, supplierName, fileName, status, itemCount, pendingCount, createdAtUtc]

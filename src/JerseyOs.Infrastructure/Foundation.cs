@@ -102,6 +102,7 @@ public sealed class JerseyOsDbContext(
     public DbSet<Supplier> SuppliersSet => Set<Supplier>();
     public DbSet<ImportBatch> ImportBatchesSet => Set<ImportBatch>();
     public DbSet<ImportItem> ImportItemsSet => Set<ImportItem>();
+    public DbSet<SupplierScrapeRun> SupplierScrapeRunsSet => Set<SupplierScrapeRun>();
     public DbSet<SalesChannel> SalesChannelsSet => Set<SalesChannel>();
     public DbSet<ExternalIdMap> ExternalIdMapsSet => Set<ExternalIdMap>();
     public DbSet<PublishRun> PublishRunsSet => Set<PublishRun>();
@@ -121,6 +122,7 @@ public sealed class JerseyOsDbContext(
     IQueryable<Supplier> IApplicationDbContext.Suppliers => SuppliersSet;
     IQueryable<ImportBatch> IApplicationDbContext.ImportBatches => ImportBatchesSet;
     IQueryable<ImportItem> IApplicationDbContext.ImportItems => ImportItemsSet;
+    IQueryable<SupplierScrapeRun> IApplicationDbContext.SupplierScrapeRuns => SupplierScrapeRunsSet;
     IQueryable<SalesChannel> IApplicationDbContext.SalesChannels => SalesChannelsSet;
     IQueryable<ExternalIdMap> IApplicationDbContext.ExternalIdMaps => ExternalIdMapsSet;
     IQueryable<PublishRun> IApplicationDbContext.PublishRuns => PublishRunsSet;
@@ -561,7 +563,7 @@ public static class DependencyInjection
         services.AddScoped<OutboxIntegrationEventPublisher>();
         services.AddScoped<IIntegrationEventPublisher>(sp => sp.GetRequiredService<OutboxIntegrationEventPublisher>());
         services.AddObjectStorage(configuration);
-        services.AddImportServices();
+        services.AddImportServices(configuration);
         services.AddPublishingServices(configuration);
         services.AddDbContext<JerseyOsDbContext>(o => o.UseSqlServer(connectionString));
         services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<JerseyOsDbContext>());

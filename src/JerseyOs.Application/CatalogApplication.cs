@@ -22,6 +22,7 @@ public interface IApplicationDbContext
     IQueryable<Supplier> Suppliers { get; }
     IQueryable<ImportBatch> ImportBatches { get; }
     IQueryable<ImportItem> ImportItems { get; }
+    IQueryable<SupplierScrapeRun> SupplierScrapeRuns { get; }
     IQueryable<SalesChannel> SalesChannels { get; }
     IQueryable<ExternalIdMap> ExternalIdMaps { get; }
     IQueryable<PublishRun> PublishRuns { get; }

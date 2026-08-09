@@ -37,6 +37,7 @@ Configuration is loaded from `appsettings*.json`, environment variables, and an 
 | `WooCommerce__ConsumerKey` | WooCommerce REST consumer key | Yes | When Woo channel enabled |
 | `WooCommerce__ConsumerSecret` | WooCommerce REST consumer secret | Yes | When Woo channel enabled |
 | `WooCommerce__ApiVersion` | REST API version path segment (default `v3`) | No | When publishing to Woo |
+| `Import__Scrape__Engine` | Scrape engine (`Fixture` local/CI default, or `Playwright`) | No | When using scrape suppliers |
 
 ## Rules
 

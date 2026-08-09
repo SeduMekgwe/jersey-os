@@ -1,0 +1,27 @@
+{
+  "startUrl": "https://example-supplier.invalid/products",
+  "login": {
+    "url": "https://example-supplier.invalid/login",
+    "usernameSelector": "#email",
+    "passwordSelector": "#password",
+    "submitSelector": "button[type=submit]"
+  },
+  "list": {
+    "itemLinkSelector": "a.product-card",
+    "nextPageSelector": "a.next-page"
+  },
+  "product": {
+    "nameSelector": "h1.product-title",
+    "skuSelector": "[data-sku]",
+    "sizeSelector": ".variant-size.is-selected",
+    "styleCodeSelector": "[data-style-code]",
+    "teamSelector": ".meta-team",
+    "seasonSelector": ".meta-season",
+    "quantitySelector": ".stock-qty",
+    "priceSelector": ".price",
+    "imageSelector": "img.product-hero"
+  },
+  "maxProducts": 50,
+  "maxListPages": 5,
+  "navigationDelayMs": 750
+}

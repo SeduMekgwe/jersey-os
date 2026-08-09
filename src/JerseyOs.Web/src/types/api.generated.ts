@@ -454,6 +454,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/import/suppliers/{supplierId}/scrape-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listSupplierScrapeRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/import/batches": {
         parameters: {
             query?: never;
@@ -821,6 +837,8 @@ export interface components {
             feedFormat: string;
             feedUrl?: string | null;
             hasFeedAuth: boolean;
+            scrapeProfileJson?: string | null;
+            hasScrapeCredentials: boolean;
             syncCron?: string | null;
             /** Format: date-time */
             lastSyncAtUtc?: string | null;
@@ -834,6 +852,9 @@ export interface components {
             feedFormat?: string | null;
             feedUrl?: string | null;
             feedBearerToken?: string | null;
+            scrapeProfileJson?: string | null;
+            scrapeUsername?: string | null;
+            scrapePassword?: string | null;
             syncCron?: string | null;
         };
         UpdateSupplierFeedRequest: {
@@ -841,7 +862,28 @@ export interface components {
             feedFormat: string;
             feedUrl?: string | null;
             feedBearerToken?: string | null;
+            scrapeProfileJson?: string | null;
+            scrapeUsername?: string | null;
+            scrapePassword?: string | null;
             syncCron?: string | null;
+        };
+        SupplierScrapeRunResponse: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            supplierId: string;
+            status: string;
+            correlationId: string;
+            /** Format: date-time */
+            startedAtUtc?: string | null;
+            /** Format: date-time */
+            completedAtUtc?: string | null;
+            productsScraped: number;
+            /** Format: uuid */
+            importBatchId?: string | null;
+            error?: string | null;
+            /** Format: date-time */
+            createdAtUtc: string;
         };
         ImportBatchSummaryResponse: {
             /** Format: uuid */
@@ -1983,6 +2025,28 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    listSupplierScrapeRuns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                supplierId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scrape run history */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupplierScrapeRunResponse"][];
+                };
             };
         };
     };

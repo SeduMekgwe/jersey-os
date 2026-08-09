@@ -8,7 +8,26 @@ import type {
   CreateSupplierDto,
   ImportBatchSummaryDto,
   SupplierDto,
+  SupplierScrapeRunDto,
 } from '@/types/api';
+
+const demoProfile = `{
+  "list": { "itemLinkSelector": "a.product-card", "nextPageSelector": "a.next-page" },
+  "product": {
+    "nameSelector": "h1.product-title",
+    "skuSelector": "[data-sku]",
+    "sizeSelector": ".variant-size.is-selected",
+    "styleCodeSelector": "[data-style-code]",
+    "teamSelector": ".meta-team",
+    "seasonSelector": ".meta-season",
+    "quantitySelector": ".stock-qty",
+    "priceSelector": ".price",
+    "imageSelector": "img.product-hero"
+  },
+  "maxProducts": 50,
+  "maxListPages": 5,
+  "navigationDelayMs": 750
+}`;
 
 export function ImportBatchesPage() {
   const { user } = useAuth();
@@ -17,10 +36,13 @@ export function ImportBatchesPage() {
   const [supplierId, setSupplierId] = useState('');
   const [supplierName, setSupplierName] = useState('');
   const [supplierCode, setSupplierCode] = useState('');
-  const [feedKind, setFeedKind] = useState<'upload' | 'http'>('upload');
+  const [feedKind, setFeedKind] = useState<'upload' | 'http' | 'scrape'>('upload');
   const [feedFormat, setFeedFormat] = useState<'csv' | 'json'>('csv');
   const [feedUrl, setFeedUrl] = useState('');
   const [feedBearerToken, setFeedBearerToken] = useState('');
+  const [scrapeProfileJson, setScrapeProfileJson] = useState(demoProfile);
+  const [scrapeUsername, setScrapeUsername] = useState('');
+  const [scrapePassword, setScrapePassword] = useState('');
   const [syncCron, setSyncCron] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -31,6 +53,12 @@ export function ImportBatchesPage() {
   const batchesQuery = useQuery({
     queryKey: ['import', 'batches'],
     queryFn: () => apiRequest<ImportBatchSummaryDto[]>('/import/batches'),
+    refetchInterval: 5_000,
+  });
+  const scrapeRunsQuery = useQuery({
+    queryKey: ['import', 'scrape-runs', supplierId],
+    queryFn: () => apiRequest<SupplierScrapeRunDto[]>(`/import/suppliers/${supplierId}/scrape-runs`),
+    enabled: Boolean(supplierId),
     refetchInterval: 5_000,
   });
 
@@ -44,6 +72,8 @@ export function ImportBatchesPage() {
       setSupplierCode('');
       setFeedUrl('');
       setFeedBearerToken('');
+      setScrapeUsername('');
+      setScrapePassword('');
       setSyncCron('');
       setFeedKind('upload');
       setFeedFormat('csv');
@@ -59,6 +89,7 @@ export function ImportBatchesPage() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['import', 'suppliers'] });
       void queryClient.invalidateQueries({ queryKey: ['import', 'batches'] });
+      void queryClient.invalidateQueries({ queryKey: ['import', 'scrape-runs'] });
     },
     onError: (err: Error) => {
       setError(err.message);
@@ -88,7 +119,8 @@ export function ImportBatchesPage() {
       <div>
         <h1 className="text-3xl font-semibold tracking-tight">Supplier import</h1>
         <p className="mt-2 text-muted-foreground">
-          Upload CSV/JSON or sync HTTP supplier feeds into the review queue, then approve into draft catalog.
+          Upload files, sync HTTP feeds, or scrape supplier sites into the review queue. Respect site terms
+          and robots when scraping.
         </p>
       </div>
       {error && (
@@ -119,9 +151,9 @@ export function ImportBatchesPage() {
           {selected && (
             <div className="space-y-2 rounded-md border border-border p-3 text-sm">
               <p>
-                {selected.feedKind === 'http'
-                  ? `HTTP feed: ${selected.feedUrl ?? '—'}`
-                  : 'Upload feed (manual file)'}
+                {selected.feedKind === 'http' && `HTTP feed: ${selected.feedUrl ?? '—'}`}
+                {selected.feedKind === 'scrape' && `Scrape start: ${selected.feedUrl ?? '—'}`}
+                {selected.feedKind === 'upload' && 'Upload feed (manual file)'}
               </p>
               {selected.lastSyncStatus && (
                 <p className="text-muted-foreground">
@@ -132,7 +164,7 @@ export function ImportBatchesPage() {
                   {selected.lastSyncError ? ` · ${selected.lastSyncError}` : ''}
                 </p>
               )}
-              {selected.feedKind === 'http' && (
+              {(selected.feedKind === 'http' || selected.feedKind === 'scrape') && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -142,7 +174,7 @@ export function ImportBatchesPage() {
                     syncSupplier.mutate(selected.id);
                   }}
                 >
-                  Sync now
+                  {selected.feedKind === 'scrape' ? 'Scrape now' : 'Sync now'}
                 </Button>
               )}
             </div>
@@ -166,16 +198,19 @@ export function ImportBatchesPage() {
               className="h-10 rounded-md border border-input bg-background px-3 text-sm"
               value={feedKind}
               onChange={(e) => {
-                setFeedKind(e.target.value as 'upload' | 'http');
+                const next = e.target.value as 'upload' | 'http' | 'scrape';
+                setFeedKind(next);
+                if (next === 'scrape') setFeedFormat('json');
               }}
             >
               <option value="upload">Upload</option>
               <option value="http">HTTP</option>
+              <option value="scrape">Scrape</option>
             </select>
           </div>
-          <div className="grid gap-3 md:grid-cols-3">
+          {feedKind !== 'scrape' && (
             <select
-              className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm md:w-1/3"
               value={feedFormat}
               onChange={(e) => {
                 setFeedFormat(e.target.value as 'csv' | 'json');
@@ -184,26 +219,61 @@ export function ImportBatchesPage() {
               <option value="csv">CSV</option>
               <option value="json">JSON</option>
             </select>
-            {feedKind === 'http' && (
-              <>
-                <Input
-                  placeholder="https://supplier.example/feed.json"
-                  value={feedUrl}
-                  onChange={(e) => {
-                    setFeedUrl(e.target.value);
-                  }}
-                />
-                <Input
-                  placeholder="Bearer token (optional)"
-                  value={feedBearerToken}
-                  onChange={(e) => {
-                    setFeedBearerToken(e.target.value);
-                  }}
-                />
-              </>
-            )}
-          </div>
+          )}
+          {(feedKind === 'http' || feedKind === 'scrape') && (
+            <Input
+              placeholder={
+                feedKind === 'scrape'
+                  ? 'https://supplier.example/products'
+                  : 'https://supplier.example/feed.json'
+              }
+              value={feedUrl}
+              onChange={(e) => {
+                setFeedUrl(e.target.value);
+              }}
+            />
+          )}
           {feedKind === 'http' && (
+            <Input
+              placeholder="Bearer token (optional)"
+              value={feedBearerToken}
+              onChange={(e) => {
+                setFeedBearerToken(e.target.value);
+              }}
+            />
+          )}
+          {feedKind === 'scrape' && (
+            <>
+              <label className="grid gap-1 text-sm">
+                Scrape profile JSON
+                <textarea
+                  className="min-h-40 rounded-md border border-input bg-background px-3 py-2 font-mono text-xs"
+                  value={scrapeProfileJson}
+                  onChange={(e) => {
+                    setScrapeProfileJson(e.target.value);
+                  }}
+                />
+              </label>
+              <div className="grid gap-3 md:grid-cols-2">
+                <Input
+                  placeholder="Login username (optional)"
+                  value={scrapeUsername}
+                  onChange={(e) => {
+                    setScrapeUsername(e.target.value);
+                  }}
+                />
+                <Input
+                  placeholder="Login password (optional)"
+                  type="password"
+                  value={scrapePassword}
+                  onChange={(e) => {
+                    setScrapePassword(e.target.value);
+                  }}
+                />
+              </div>
+            </>
+          )}
+          {(feedKind === 'http' || feedKind === 'scrape') && (
             <Input
               placeholder="Hangfire cron (optional, e.g. 0 */6 * * *)"
               value={syncCron}
@@ -220,10 +290,14 @@ export function ImportBatchesPage() {
                 name: supplierName,
                 code: supplierCode,
                 feedKind,
-                feedFormat,
-                feedUrl: feedKind === 'http' ? feedUrl : null,
+                feedFormat: feedKind === 'scrape' ? 'json' : feedFormat,
+                feedUrl: feedKind === 'upload' ? null : feedUrl,
                 feedBearerToken: feedKind === 'http' && feedBearerToken ? feedBearerToken : null,
-                syncCron: feedKind === 'http' && syncCron ? syncCron : null,
+                scrapeProfileJson: feedKind === 'scrape' ? scrapeProfileJson : null,
+                scrapeUsername: feedKind === 'scrape' && scrapeUsername ? scrapeUsername : null,
+                scrapePassword: feedKind === 'scrape' && scrapePassword ? scrapePassword : null,
+                syncCron:
+                  (feedKind === 'http' || feedKind === 'scrape') && syncCron ? syncCron : null,
               });
             }}
           >
@@ -243,6 +317,33 @@ export function ImportBatchesPage() {
             />
           )}
         </Card>
+      )}
+      {selected?.feedKind === 'scrape' && (
+        <section className="space-y-3">
+          <h2 className="text-lg font-medium">Scrape runs</h2>
+          {(scrapeRunsQuery.data ?? []).map((run) => (
+            <Card key={run.id} className="space-y-1 p-4 text-sm">
+              <div className="flex flex-wrap justify-between gap-2">
+                <span className="font-medium">{run.status}</span>
+                <span className="text-muted-foreground">
+                  {run.productsScraped} products
+                  {run.completedAtUtc
+                    ? ` · ${new Date(run.completedAtUtc).toLocaleString()}`
+                    : ''}
+                </span>
+              </div>
+              {run.importBatchId && (
+                <Link to={`/import/${run.importBatchId}`} className="text-primary hover:underline">
+                  Open import batch
+                </Link>
+              )}
+              {run.error && <p className="text-destructive">{run.error}</p>}
+            </Card>
+          ))}
+          {scrapeRunsQuery.isSuccess && scrapeRunsQuery.data.length === 0 && (
+            <p className="text-sm text-muted-foreground">No scrape runs yet.</p>
+          )}
+        </section>
       )}
       <div className="grid gap-3">
         {(batchesQuery.data ?? []).map((batch) => (

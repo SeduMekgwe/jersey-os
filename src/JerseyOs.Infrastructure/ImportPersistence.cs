@@ -3,7 +3,9 @@ using Hangfire;
 using JerseyOs.Application;
 using JerseyOs.Domain;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace JerseyOs.Infrastructure;
 
@@ -20,10 +22,23 @@ public static class ImportModelBuilder
             b.Property(x => x.FeedFormat).HasMaxLength(32).IsRequired();
             b.Property(x => x.FeedUrl).HasMaxLength(1000);
             b.Property(x => x.FeedBearerToken).HasMaxLength(2000);
+            b.Property(x => x.ScrapeProfileJson).HasColumnType("nvarchar(max)");
+            b.Property(x => x.ScrapeUsername).HasMaxLength(256);
+            b.Property(x => x.ScrapePassword).HasMaxLength(512);
             b.Property(x => x.SyncCron).HasMaxLength(64);
             b.Property(x => x.LastSyncStatus).HasMaxLength(32);
             b.Property(x => x.LastSyncError).HasMaxLength(2000);
             b.HasIndex(x => new { x.OrganizationId, x.Code }).IsUnique();
+            b.HasQueryFilter(x => x.OrganizationId == effectiveOrganizationId);
+        });
+        builder.Entity<SupplierScrapeRun>(b =>
+        {
+            b.ToTable("import_supplier_scrape_runs");
+            b.Property(x => x.Status).HasConversion<string>().HasMaxLength(32);
+            b.Property(x => x.CorrelationId).HasMaxLength(64).IsRequired();
+            b.Property(x => x.Error).HasMaxLength(2000);
+            b.HasIndex(x => new { x.OrganizationId, x.SupplierId, x.CreatedAtUtc });
+            b.HasOne(x => x.Supplier).WithMany().HasForeignKey(x => x.SupplierId).OnDelete(DeleteBehavior.Restrict);
             b.HasQueryFilter(x => x.OrganizationId == effectiveOrganizationId);
         });
         builder.Entity<ImportBatch>(b =>
@@ -85,8 +100,8 @@ public sealed class HangfireImportJobScheduler(IBackgroundJobClient jobs, IRecur
     public void EnqueueParse(Guid batchId) =>
         jobs.Enqueue<ParseImportBatchJob>(job => job.ExecuteAsync(batchId, CancellationToken.None));
 
-    public void EnqueueFetchSupplierFeed(Guid supplierId) =>
-        jobs.Enqueue<FetchSupplierFeedJob>(job => job.ExecuteAsync(supplierId, CancellationToken.None));
+    public void EnqueueSyncSupplierFeed(Guid supplierId) =>
+        jobs.Enqueue<DispatchSupplierFeedJob>(job => job.ExecuteAsync(supplierId, CancellationToken.None));
 
     public void UpsertSupplierFeedSchedule(Guid organizationId, Guid supplierId, string? cronExpression)
     {
@@ -97,7 +112,7 @@ public sealed class HangfireImportJobScheduler(IBackgroundJobClient jobs, IRecur
             return;
         }
 
-        recurring.AddOrUpdate<FetchSupplierFeedJob>(
+        recurring.AddOrUpdate<DispatchSupplierFeedJob>(
             jobId,
             job => job.ExecuteAsync(supplierId, CancellationToken.None),
             cronExpression.Trim());
@@ -212,6 +227,34 @@ public sealed class ParseImportBatchJob(
     }
 }
 
+public sealed class DispatchSupplierFeedJob(
+    FetchSupplierFeedJob fetchJob,
+    IBackgroundJobClient backgroundJobs,
+    JerseyOsDbContext db)
+{
+    [AutomaticRetry(Attempts = 3)]
+    public async Task ExecuteAsync(Guid supplierId, CancellationToken cancellationToken)
+    {
+        var kind = await db.SuppliersSet.IgnoreQueryFilters()
+            .Where(x => x.Id == supplierId)
+            .Select(x => x.FeedKind)
+            .SingleOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (kind == SupplierFeedKinds.Http)
+        {
+            await fetchJob.ExecuteAsync(supplierId, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        if (kind == SupplierFeedKinds.Scrape)
+        {
+            // Isolate browser work on the scrape queue so it cannot starve Shopify/default jobs.
+            backgroundJobs.Enqueue<ScrapeSupplierFeedJob>(job =>
+                job.ExecuteAsync(supplierId, CancellationToken.None));
+        }
+    }
+}
+
 public sealed class FetchSupplierFeedJob(
     JerseyOsDbContext db,
     IObjectStorage storage,
@@ -287,16 +330,114 @@ public sealed class FetchSupplierFeedJob(
     }
 }
 
+public sealed class ScrapeSupplierFeedJob(
+    JerseyOsDbContext db,
+    IObjectStorage storage,
+    ISupplierSiteCrawler crawler,
+    IImportJobScheduler jobs,
+    TimeProvider time)
+{
+    [Queue("scrape")]
+    [AutomaticRetry(Attempts = 2)]
+    public async Task ExecuteAsync(Guid supplierId, CancellationToken cancellationToken)
+    {
+        var supplier = await db.SuppliersSet.IgnoreQueryFilters()
+            .SingleOrDefaultAsync(x => x.Id == supplierId, cancellationToken)
+            .ConfigureAwait(false);
+        if (supplier is null || supplier.FeedKind != SupplierFeedKinds.Scrape)
+        {
+            return;
+        }
+
+        var now = time.GetUtcNow();
+        var run = new SupplierScrapeRun(supplier.OrganizationId, supplier.Id, Guid.NewGuid().ToString("N"));
+        run.MarkRunning(now);
+        db.SupplierScrapeRunsSet.Add(run);
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(supplier.FeedUrl) || string.IsNullOrWhiteSpace(supplier.ScrapeProfileJson))
+            {
+                throw new InvalidOperationException("Scrape supplier is missing start URL or profile JSON.");
+            }
+
+            var result = await crawler.CrawlAsync(
+                    new SupplierScrapeRequest(
+                        supplier.OrganizationId,
+                        supplier.Id,
+                        supplier.FeedUrl,
+                        supplier.ScrapeProfileJson,
+                        supplier.ScrapeUsername,
+                        supplier.ScrapePassword),
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            await using var buffer = new MemoryStream(result.JsonUtf8);
+            var fileName = $"scrape-{supplier.Code}-{now:yyyyMMddHHmmss}.json";
+            var key = $"imports/{supplier.OrganizationId:N}/{Guid.NewGuid():N}.json";
+            await storage.PutAsync(key, buffer, "application/json", cancellationToken).ConfigureAwait(false);
+
+            var batch = new ImportBatch(
+                supplier.OrganizationId,
+                supplier.Id,
+                fileName,
+                key,
+                "application/json",
+                run.CorrelationId);
+            db.ImportBatchesSet.Add(batch);
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+            run.MarkSucceeded(result.ProductCount, batch.Id, time.GetUtcNow());
+            supplier.RecordSyncSucceeded(time.GetUtcNow());
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            jobs.EnqueueParse(batch.Id);
+        }
+        catch (Exception exception)
+        {
+            run.MarkFailed(exception.Message, time.GetUtcNow());
+            supplier.RecordSyncFailed(exception.Message, time.GetUtcNow());
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            throw;
+        }
+    }
+}
+
+public sealed class ImportScrapeOptions
+{
+    public const string Section = "Import:Scrape";
+    /// <summary>Playwright (real browser) or Fixture (deterministic local/CI without browsers).</summary>
+    public string Engine { get; set; } = "Fixture";
+}
+
 public static class ImportInfrastructureExtensions
 {
-    public static IServiceCollection AddImportServices(this IServiceCollection services)
+    public static IServiceCollection AddImportServices(this IServiceCollection services, IConfiguration? configuration = null)
     {
+        if (configuration is not null)
+        {
+            services.Configure<ImportScrapeOptions>(configuration.GetSection(ImportScrapeOptions.Section));
+        }
+        else
+        {
+            services.Configure<ImportScrapeOptions>(_ => { });
+        }
+
         services.AddSingleton<ISupplierCatalogFeed, CsvSupplierCatalogFeed>();
         services.AddSingleton<ISupplierCatalogFeed, JsonSupplierCatalogFeed>();
         services.AddSingleton<ISupplierCatalogFeedResolver, SupplierCatalogFeedRegistry>();
+        services.AddSingleton<ISupplierSiteCrawler>(sp =>
+        {
+            var engine = sp.GetRequiredService<IOptions<ImportScrapeOptions>>().Value.Engine;
+            return string.Equals(engine, "Playwright", StringComparison.OrdinalIgnoreCase)
+                ? new PlaywrightSupplierSiteCrawler()
+                : new FixtureSupplierSiteCrawler();
+        });
         services.AddScoped<IImportJobScheduler, HangfireImportJobScheduler>();
         services.AddScoped<ParseImportBatchJob>();
         services.AddScoped<FetchSupplierFeedJob>();
+        services.AddScoped<ScrapeSupplierFeedJob>();
+        services.AddScoped<DispatchSupplierFeedJob>();
         services.AddHttpClient("import-images", client =>
         {
             client.Timeout = TimeSpan.FromSeconds(30);
@@ -314,12 +455,13 @@ public static class ImportInfrastructureExtensions
         var db = scope.ServiceProvider.GetRequiredService<JerseyOsDbContext>();
         var recurring = scope.ServiceProvider.GetRequiredService<IRecurringJobManager>();
         var suppliers = db.SuppliersSet.IgnoreQueryFilters()
-            .Where(x => x.FeedKind == SupplierFeedKinds.Http && x.SyncCron != null && x.SyncCron != "")
+            .Where(x => (x.FeedKind == SupplierFeedKinds.Http || x.FeedKind == SupplierFeedKinds.Scrape)
+                        && x.SyncCron != null && x.SyncCron != "")
             .Select(x => new { x.OrganizationId, x.Id, x.SyncCron })
             .ToList();
         foreach (var supplier in suppliers)
         {
-            recurring.AddOrUpdate<FetchSupplierFeedJob>(
+            recurring.AddOrUpdate<DispatchSupplierFeedJob>(
                 SupplierFeedSchedule.JobId(supplier.OrganizationId, supplier.Id),
                 job => job.ExecuteAsync(supplier.Id, CancellationToken.None),
                 supplier.SyncCron!);

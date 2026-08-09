@@ -8,6 +8,8 @@ public sealed record SupplierResponse(
     string FeedFormat,
     string? FeedUrl,
     bool HasFeedAuth,
+    string? ScrapeProfileJson,
+    bool HasScrapeCredentials,
     string? SyncCron,
     DateTimeOffset? LastSyncAtUtc,
     string? LastSyncStatus,
@@ -20,6 +22,9 @@ public sealed record CreateSupplierRequest(
     string? FeedFormat = null,
     string? FeedUrl = null,
     string? FeedBearerToken = null,
+    string? ScrapeProfileJson = null,
+    string? ScrapeUsername = null,
+    string? ScrapePassword = null,
     string? SyncCron = null);
 
 public sealed record UpdateSupplierFeedRequest(
@@ -27,7 +32,22 @@ public sealed record UpdateSupplierFeedRequest(
     string FeedFormat,
     string? FeedUrl,
     string? FeedBearerToken,
+    string? ScrapeProfileJson,
+    string? ScrapeUsername,
+    string? ScrapePassword,
     string? SyncCron);
+
+public sealed record SupplierScrapeRunResponse(
+    Guid Id,
+    Guid SupplierId,
+    string Status,
+    string CorrelationId,
+    DateTimeOffset? StartedAtUtc,
+    DateTimeOffset? CompletedAtUtc,
+    int ProductsScraped,
+    Guid? ImportBatchId,
+    string? Error,
+    DateTimeOffset CreatedAtUtc);
 
 public sealed record ImportBatchSummaryResponse(
     Guid Id,

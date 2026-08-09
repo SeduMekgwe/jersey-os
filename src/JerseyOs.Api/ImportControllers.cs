@@ -31,6 +31,9 @@ public sealed class ImportController(ISender sender) : ControllerBase
                 request.FeedFormat,
                 request.FeedUrl,
                 request.FeedBearerToken,
+                request.ScrapeProfileJson,
+                request.ScrapeUsername,
+                request.ScrapePassword,
                 request.SyncCron),
             cancellationToken);
 
@@ -48,6 +51,9 @@ public sealed class ImportController(ISender sender) : ControllerBase
                 request.FeedFormat,
                 request.FeedUrl,
                 request.FeedBearerToken,
+                request.ScrapeProfileJson,
+                request.ScrapeUsername,
+                request.ScrapePassword,
                 request.SyncCron),
             cancellationToken);
         return supplier is null ? NotFound() : Ok(supplier);
@@ -63,6 +69,12 @@ public sealed class ImportController(ISender sender) : ControllerBase
         var supplier = await sender.Send(new SyncSupplierFeedCommand(supplierId), cancellationToken);
         return supplier is null ? NotFound() : Ok(supplier);
     }
+
+    [HttpGet("suppliers/{supplierId:guid}/scrape-runs")]
+    [ProducesResponseType<IReadOnlyCollection<SupplierScrapeRunResponse>>(StatusCodes.Status200OK)]
+    public Task<IReadOnlyCollection<SupplierScrapeRunResponse>> ListScrapeRuns(
+        Guid supplierId, CancellationToken cancellationToken) =>
+        sender.Send(new ListSupplierScrapeRunsQuery(supplierId), cancellationToken);
 
     [HttpGet("batches")]
     [ProducesResponseType<IReadOnlyCollection<ImportBatchSummaryResponse>>(StatusCodes.Status200OK)]
