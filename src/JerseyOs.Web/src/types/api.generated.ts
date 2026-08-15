@@ -752,6 +752,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ai/templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List enabled prompt templates */
+        get: operations["listAiPromptTemplates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ai/generations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List recent AI generations */
+        get: operations["listAiGenerations"];
+        put?: never;
+        /** Enqueue an AI generation for operator review */
+        post: operations["createAiGeneration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ai/generations/{generationId}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve a generation and apply it to the target */
+        post: operations["approveAiGeneration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ai/generations/{generationId}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject a generation without applying it */
+        post: operations["rejectAiGeneration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -857,6 +926,7 @@ export interface components {
             seoTitle?: string | null;
             seoDescription?: string | null;
             seoHandle?: string | null;
+            description?: string | null;
             categoryIds: string[];
             tagIds: string[];
             collectionIds: string[];
@@ -909,6 +979,7 @@ export interface components {
             seoTitle?: string | null;
             seoDescription?: string | null;
             seoHandle?: string | null;
+            description?: string | null;
         };
         UpsertVariantRequest: {
             /** Format: uuid */
@@ -1128,6 +1199,9 @@ export interface components {
             seasonName?: string | null;
             quantity?: number | null;
             imageUrl?: string | null;
+            description?: string | null;
+            seoTitle?: string | null;
+            seoDescription?: string | null;
             /** Format: uuid */
             matchedProductId?: string | null;
             /** Format: uuid */
@@ -1206,6 +1280,49 @@ export interface components {
             processedAtUtc?: string | null;
             /** Format: date-time */
             createdAtUtc: string;
+        };
+        AiPromptTemplateResponse: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            kind: string;
+            systemPrompt: string;
+            userPromptTemplate: string;
+            isEnabled: boolean;
+        };
+        AiGenerationResponse: {
+            /** Format: uuid */
+            id: string;
+            kind: string;
+            targetType: string;
+            /** Format: uuid */
+            targetId: string;
+            status: string;
+            outputText?: string | null;
+            model?: string | null;
+            promptTokens: number;
+            completionTokens: number;
+            /** Format: decimal */
+            estimatedCostUsd: number;
+            error?: string | null;
+            correlationId: string;
+            /** Format: date-time */
+            createdAtUtc: string;
+            /** Format: date-time */
+            completedAtUtc?: string | null;
+            /** Format: date-time */
+            appliedAtUtc?: string | null;
+        };
+        CreateAiGenerationRequest: {
+            kind: string;
+            targetType: string;
+            /** Format: uuid */
+            targetId: string;
+            /** Format: uuid */
+            promptTemplateId?: string | null;
+        };
+        RejectAiGenerationRequest: {
+            note?: string | null;
         };
     };
     responses: never;
@@ -2868,6 +2985,142 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["WebhookDeliveryResponse"][];
                 };
+            };
+        };
+    };
+    listAiPromptTemplates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Prompt templates */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiPromptTemplateResponse"][];
+                };
+            };
+        };
+    };
+    listAiGenerations: {
+        parameters: {
+            query?: {
+                targetType?: string;
+                targetId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Generations */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiGenerationResponse"][];
+                };
+            };
+        };
+    };
+    createAiGeneration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAiGenerationRequest"];
+            };
+        };
+        responses: {
+            /** @description Enqueued */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiGenerationResponse"];
+                };
+            };
+            /** @description Validation or business rule failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    approveAiGeneration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                generationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Applied */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiGenerationResponse"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    rejectAiGeneration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                generationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RejectAiGenerationRequest"];
+            };
+        };
+        responses: {
+            /** @description Rejected */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiGenerationResponse"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

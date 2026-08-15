@@ -133,6 +133,7 @@ public static class CatalogModelBuilder
             b.Property(x => x.SeoTitle).HasMaxLength(200);
             b.Property(x => x.SeoDescription).HasMaxLength(320);
             b.Property(x => x.SeoHandle).HasMaxLength(100);
+            b.Property(x => x.Description).HasMaxLength(4000);
             b.Property(x => x.Status).HasConversion<string>().HasMaxLength(32);
             b.HasIndex(x => new { x.OrganizationId, x.Slug }).IsUnique();
             b.HasOne(x => x.Team).WithMany().HasForeignKey(x => x.TeamId).OnDelete(DeleteBehavior.Restrict);

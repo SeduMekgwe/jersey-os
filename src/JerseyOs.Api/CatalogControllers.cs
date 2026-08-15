@@ -77,7 +77,8 @@ public sealed class CatalogController(ISender sender) : ControllerBase
                 request.TagIds,
                 request.SeoTitle,
                 request.SeoDescription,
-                request.SeoHandle),
+                request.SeoHandle,
+                request.Description),
             cancellationToken);
         return product is null ? NotFound() : Ok(product);
     }

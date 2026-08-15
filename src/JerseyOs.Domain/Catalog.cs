@@ -154,6 +154,7 @@ public sealed class Product : AuditableEntity, IOrganizationScoped
     public string? SeoTitle { get; private set; }
     public string? SeoDescription { get; private set; }
     public string? SeoHandle { get; private set; }
+    public string? Description { get; private set; }
     public Team? Team { get; private set; }
     public Season? Season { get; private set; }
     public IReadOnlyCollection<ProductVariant> Variants => _variants.AsReadOnly();
@@ -188,6 +189,18 @@ public sealed class Product : AuditableEntity, IOrganizationScoped
         }
 
         SeoHandle = handle;
+        Raise(new ProductUpdated(Id, OrganizationId, now));
+    }
+
+    public void SetDescription(string? description, DateTimeOffset now)
+    {
+        EnsureNotArchived();
+        Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
+        if (Description is { Length: > 4000 })
+        {
+            throw new InvalidOperationException("Description cannot exceed 4000 characters.");
+        }
+
         Raise(new ProductUpdated(Id, OrganizationId, now));
     }
 
@@ -324,6 +337,15 @@ public sealed class Product : AuditableEntity, IOrganizationScoped
         _images.Remove(image);
         Raise(new ProductUpdated(Id, OrganizationId, now));
         return image;
+    }
+
+    public void SetImageAltText(Guid imageId, string? altText, DateTimeOffset now)
+    {
+        EnsureNotArchived();
+        var image = _images.SingleOrDefault(x => x.Id == imageId)
+            ?? throw new InvalidOperationException("Image was not found on this product.");
+        image.SetAltText(altText);
+        Raise(new ProductUpdated(Id, OrganizationId, now));
     }
 
     public void SetCategories(IEnumerable<Guid> categoryIds, DateTimeOffset now)
@@ -591,6 +613,15 @@ public sealed class ProductImage : AuditableEntity, IOrganizationScoped
     public Product Product { get; private set; } = null!;
 
     public void SetSortOrder(int sortOrder) => SortOrder = sortOrder;
+
+    public void SetAltText(string? altText)
+    {
+        AltText = string.IsNullOrWhiteSpace(altText) ? null : altText.Trim();
+        if (AltText is { Length: > 300 })
+        {
+            throw new InvalidOperationException("Alt text cannot exceed 300 characters.");
+        }
+    }
 }
 
 public sealed class ProductCategory : AuditableEntity, IOrganizationScoped

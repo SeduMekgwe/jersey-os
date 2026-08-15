@@ -26,6 +26,8 @@ public interface IApplicationDbContext
     IQueryable<PricingRule> PricingRules { get; }
     IQueryable<Collection> Collections { get; }
     IQueryable<CollectionProduct> CollectionProducts { get; }
+    IQueryable<AiPromptTemplate> AiPromptTemplates { get; }
+    IQueryable<AiGeneration> AiGenerations { get; }
     IQueryable<SalesChannel> SalesChannels { get; }
     IQueryable<ExternalIdMap> ExternalIdMaps { get; }
     IQueryable<PublishRun> PublishRuns { get; }
@@ -55,6 +57,7 @@ public static class CatalogMapping
             product.SeoTitle,
             product.SeoDescription,
             product.SeoHandle,
+            product.Description,
             product.Categories.Select(x => x.CategoryId).ToArray(),
             product.Tags.Select(x => x.TagId).ToArray(),
             collectionIds ?? [],
@@ -129,7 +132,8 @@ public sealed record UpdateProductCommand(
     IReadOnlyCollection<Guid>? TagIds,
     string? SeoTitle = null,
     string? SeoDescription = null,
-    string? SeoHandle = null) : IRequest<ProductResponse?>;
+    string? SeoHandle = null,
+    string? Description = null) : IRequest<ProductResponse?>;
 
 public sealed record ActivateProductCommand(Guid ProductId) : IRequest<ProductResponse?>;
 public sealed record ArchiveProductCommand(Guid ProductId) : IRequest<ProductResponse?>;
@@ -212,6 +216,7 @@ public sealed class UpdateProductValidator : AbstractValidator<UpdateProductComm
         RuleFor(x => x.SeoDescription).MaximumLength(320);
         RuleFor(x => x.SeoHandle).MaximumLength(100).Matches("^[a-z0-9]+(?:-[a-z0-9]+)*$")
             .When(x => !string.IsNullOrWhiteSpace(x.SeoHandle));
+        RuleFor(x => x.Description).MaximumLength(4000);
     }
 }
 
@@ -303,6 +308,7 @@ public sealed class UpdateProductHandler(
         product.SetCategories(request.CategoryIds ?? [], time.GetUtcNow());
         product.SetTags(request.TagIds ?? [], time.GetUtcNow());
         product.SetSeo(request.SeoTitle, request.SeoDescription, request.SeoHandle, time.GetUtcNow());
+        product.SetDescription(request.Description, time.GetUtcNow());
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return await CatalogMapping.ToResponseAsync(product, storage, db, cancellationToken).ConfigureAwait(false);
     }

@@ -14,7 +14,7 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddHangfireServer(options =>
 {
     options.WorkerCount = 2;
-    options.Queues = ["default", "scrape"];
+    options.Queues = ["default", "scrape", "ai"];
 });
 builder.Services.AddOpenTelemetry()
     .ConfigureResource(r => r.AddService("JerseyOs.Worker"))

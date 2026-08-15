@@ -113,6 +113,23 @@ public static class Bootstrapper
                 new SalesChannel(organizationId, SalesChannelCodes.WooCommerce, "WooCommerce", enabled: false));
         }
 
+        foreach (var spec in AiDefaultPromptTemplates.All)
+        {
+            if (!await db.AiPromptTemplatesSet.IgnoreQueryFilters()
+                    .AnyAsync(
+                        x => x.OrganizationId == organizationId && x.Kind == spec.Kind,
+                        cancellationToken))
+            {
+                db.AiPromptTemplatesSet.Add(
+                    new AiPromptTemplate(
+                        organizationId,
+                        spec.Name,
+                        spec.Kind,
+                        spec.SystemPrompt,
+                        spec.UserPromptTemplate));
+            }
+        }
+
         await db.SaveChangesAsync(cancellationToken);
     }
 }

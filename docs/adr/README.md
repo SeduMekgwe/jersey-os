@@ -23,4 +23,5 @@ ADRs are immutable decision history. Supersede an accepted ADR with a new ADR; d
 - [0019 — Playwright supplier scrape intake](0019-playwright-supplier-scrape.md)
 - [0020 — Catalog pricing rules](0020-catalog-pricing-rules.md)
 - [0021 — Catalog SEO and collections](0021-catalog-seo-collections.md)
+- [0022 — AI content engine](0022-ai-content-engine.md)
 - [Template](template.md)

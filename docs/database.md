@@ -117,7 +117,11 @@ erDiagram
   IMPORT_BATCH ||--o{ IMPORT_ITEM : contains
 ```
 
-Batches track parse/review lifecycle; items store proposed fields, match hints, and applied product/variant links after approve.
+Batches track parse/review lifecycle; items store proposed fields, match hints, and applied product/variant links after approve. Proposed copy fields are `description`, `seo_title`, and `seo_description`.
+
+## AI content model
+
+Tables are prefixed `ai_` and organization-filtered: `ai_prompt_templates` and `ai_generations`. Generations record kind, target, status, token usage, and estimated cost. Apply is operator-approved only.
 
 ## Publishing model
 

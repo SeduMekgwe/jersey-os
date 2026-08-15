@@ -6,6 +6,7 @@ import { Button, Card, Input } from '@/components/ui';
 import { apiRequest } from '@/lib/api';
 import type {
   AdjustInventoryDto,
+  AiGenerationDto,
   CreateProductDto,
   InventoryDto,
   ProductDto,
@@ -13,6 +14,13 @@ import type {
   TaxonomyItemDto,
   UpsertVariantDto,
 } from '@/types/api';
+
+const productAiKinds = [
+  { kind: 'title', label: 'Title' },
+  { kind: 'description', label: 'Description' },
+  { kind: 'seo-title', label: 'SEO title' },
+  { kind: 'seo-description', label: 'SEO description' },
+] as const;
 
 export function ProductDetailPage() {
   const { productId } = useParams();
@@ -24,6 +32,8 @@ export function ProductDetailPage() {
   const canAdjust = user?.permissions.includes('inventory.adjust') ?? false;
   const canPublish = user?.permissions.includes('publishing.manage') ?? false;
   const canReadPublish = user?.permissions.includes('publishing.read') ?? false;
+  const canAiRead = user?.permissions.includes('ai.read') ?? false;
+  const canAiWrite = user?.permissions.includes('ai.write') ?? false;
 
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
@@ -33,6 +43,7 @@ export function ProductDetailPage() {
   const [seoTitle, setSeoTitle] = useState('');
   const [seoDescription, setSeoDescription] = useState('');
   const [seoHandle, setSeoHandle] = useState('');
+  const [description, setDescription] = useState('');
   const [sku, setSku] = useState('');
   const [size, setSize] = useState('M');
   const [priceAmount, setPriceAmount] = useState('');
@@ -79,6 +90,7 @@ export function ProductDetailPage() {
     setSeoTitle(product.seoTitle ?? '');
     setSeoDescription(product.seoDescription ?? '');
     setSeoHandle(product.seoHandle ?? '');
+    setDescription(product.description ?? '');
   }, [product]);
 
   const createMutation = useMutation({
@@ -111,6 +123,7 @@ export function ProductDetailPage() {
           seoTitle: seoTitle || null,
           seoDescription: seoDescription || null,
           seoHandle: seoHandle || null,
+          description: description || null,
         }),
       }),
     onSuccess: () => {
@@ -198,6 +211,54 @@ export function ProductDetailPage() {
       setError(err.message);
     },
   });
+  const generationsQuery = useQuery({
+    queryKey: ['ai', 'generations', productId],
+    enabled: !isNew && !!productId && canAiRead,
+    queryFn: () => apiRequest<AiGenerationDto[]>('/ai/generations'),
+    refetchInterval: (query) =>
+      query.state.data?.some((item) => item.status === 'Pending') ? 2_000 : false,
+  });
+  const generateMutation = useMutation({
+    mutationFn: (body: { kind: string; targetType: string; targetId: string }) =>
+      apiRequest<AiGenerationDto>('/ai/generations', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['ai', 'generations', productId] });
+    },
+    onError: (err: Error) => {
+      setError(err.message);
+    },
+  });
+  const approveGenerationMutation = useMutation({
+    mutationFn: (id: string) =>
+      apiRequest<AiGenerationDto>(`/ai/generations/${id}/approve`, { method: 'POST' }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['ai', 'generations', productId] });
+      void queryClient.invalidateQueries({ queryKey: ['catalog', 'product', productId] });
+    },
+    onError: (err: Error) => {
+      setError(err.message);
+    },
+  });
+  const rejectGenerationMutation = useMutation({
+    mutationFn: (id: string) =>
+      apiRequest<AiGenerationDto>(`/ai/generations/${id}/reject`, {
+        method: 'POST',
+        body: JSON.stringify({ note: 'rejected in review' }),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['ai', 'generations', productId] });
+    },
+    onError: (err: Error) => {
+      setError(err.message);
+    },
+  });
+  const productGenerations = (generationsQuery.data ?? []).filter((generation) => {
+    if (!product) return false;
+    return generation.targetId === product.id || product.images.some((image) => image.id === generation.targetId);
+  });
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -283,6 +344,18 @@ export function ProductDetailPage() {
               </option>
             ))}
           </select>
+        </label>
+        <label className="grid gap-1 text-sm md:col-span-2">
+          Description
+          <textarea
+            className="min-h-24 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+            value={description}
+            onChange={(e) => {
+              setDescription(e.target.value);
+            }}
+            disabled={!canWrite}
+            placeholder="Storefront description"
+          />
         </label>
         <label className="grid gap-1 text-sm md:col-span-2">
           SEO title
@@ -521,6 +594,26 @@ export function ProductDetailPage() {
                     alt={image.altText ?? product.name}
                     className="h-40 w-full object-cover"
                   />
+                  <figcaption className="space-y-2 p-2 text-xs text-muted-foreground">
+                    <p>{image.altText ?? 'No alt text'}</p>
+                    {canAiWrite && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={generateMutation.isPending}
+                        onClick={() => {
+                          setError(null);
+                          generateMutation.mutate({
+                            kind: 'alt-text',
+                            targetType: 'product-image',
+                            targetId: image.id,
+                          });
+                        }}
+                      >
+                        Generate alt
+                      </Button>
+                    )}
+                  </figcaption>
                 </figure>
               ))}
             </div>
@@ -538,6 +631,80 @@ export function ProductDetailPage() {
               />
             )}
           </Card>
+          {canAiRead && (
+            <Card className="space-y-4 p-5">
+              <h2 className="text-xl font-medium">AI copy</h2>
+              <p className="text-sm text-muted-foreground">
+                Generate draft copy, then approve to apply. Nothing publishes automatically.
+              </p>
+              {canAiWrite && (
+                <div className="flex flex-wrap gap-2">
+                  {productAiKinds.map((item) => (
+                    <Button
+                      key={item.kind}
+                      size="sm"
+                      variant="outline"
+                      disabled={generateMutation.isPending}
+                      onClick={() => {
+                        setError(null);
+                        generateMutation.mutate({
+                          kind: item.kind,
+                          targetType: 'product',
+                          targetId: product.id,
+                        });
+                      }}
+                    >
+                      Generate {item.label.toLowerCase()}
+                    </Button>
+                  ))}
+                </div>
+              )}
+              <div className="space-y-3">
+                {productGenerations.map((generation) => (
+                  <div key={generation.id} className="border-b border-border py-3 last:border-0">
+                    <p className="text-sm font-medium">
+                      {generation.kind} · {generation.status}
+                      {generation.model ? ` · ${generation.model}` : ''}
+                    </p>
+                    {generation.outputText && (
+                      <p className="mt-1 text-sm text-muted-foreground">{generation.outputText}</p>
+                    )}
+                    {generation.error && (
+                      <p className="mt-1 text-sm text-destructive">{generation.error}</p>
+                    )}
+                    {canAiWrite && generation.status === 'Succeeded' && (
+                      <div className="mt-2 flex gap-2">
+                        <Button
+                          size="sm"
+                          disabled={approveGenerationMutation.isPending}
+                          onClick={() => {
+                            setError(null);
+                            approveGenerationMutation.mutate(generation.id);
+                          }}
+                        >
+                          Approve
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={rejectGenerationMutation.isPending}
+                          onClick={() => {
+                            setError(null);
+                            rejectGenerationMutation.mutate(generation.id);
+                          }}
+                        >
+                          Reject
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {generationsQuery.isSuccess && productGenerations.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No generations yet.</p>
+                )}
+              </div>
+            </Card>
+          )}
         </>
       )}
     </div>

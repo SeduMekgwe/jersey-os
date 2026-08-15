@@ -29,6 +29,9 @@ export type ImportItemDto = components['schemas']['ImportItemResponse'];
 export type SalesChannelDto = components['schemas']['SalesChannelResponse'];
 export type PublishRunDto = components['schemas']['PublishRunResponse'];
 export type WebhookDeliveryDto = components['schemas']['WebhookDeliveryResponse'];
+export type AiPromptTemplateDto = components['schemas']['AiPromptTemplateResponse'];
+export type AiGenerationDto = components['schemas']['AiGenerationResponse'];
+export type CreateAiGenerationDto = components['schemas']['CreateAiGenerationRequest'];
 
 export interface SessionDto {
   accessToken: components['schemas']['AuthResponse']['accessToken'];

@@ -68,6 +68,9 @@ public static class ImportModelBuilder
             b.Property(x => x.TeamName).HasMaxLength(200);
             b.Property(x => x.SeasonName).HasMaxLength(200);
             b.Property(x => x.ImageUrl).HasMaxLength(1000);
+            b.Property(x => x.Description).HasMaxLength(4000);
+            b.Property(x => x.SeoTitle).HasMaxLength(200);
+            b.Property(x => x.SeoDescription).HasMaxLength(320);
             b.Property(x => x.Status).HasConversion<string>().HasMaxLength(32);
             b.Property(x => x.MatchHint).HasConversion<string>().HasMaxLength(32);
             b.Property(x => x.ReviewNote).HasMaxLength(1000);

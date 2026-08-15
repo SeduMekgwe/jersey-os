@@ -33,6 +33,7 @@ public sealed record ProductResponse(
     string? SeoTitle,
     string? SeoDescription,
     string? SeoHandle,
+    string? Description,
     IReadOnlyCollection<Guid> CategoryIds,
     IReadOnlyCollection<Guid> TagIds,
     IReadOnlyCollection<Guid> CollectionIds,
@@ -74,7 +75,8 @@ public sealed record UpdateProductRequest(
     IReadOnlyCollection<Guid>? TagIds,
     string? SeoTitle = null,
     string? SeoDescription = null,
-    string? SeoHandle = null);
+    string? SeoHandle = null,
+    string? Description = null);
 public sealed record UpsertVariantRequest(
     Guid? Id,
     string Sku,

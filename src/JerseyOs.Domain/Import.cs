@@ -490,6 +490,9 @@ public sealed class ImportItem : AuditableEntity, IOrganizationScoped
     public string? SeasonName { get; private set; }
     public int? Quantity { get; private set; }
     public string? ImageUrl { get; private set; }
+    public string? Description { get; private set; }
+    public string? SeoTitle { get; private set; }
+    public string? SeoDescription { get; private set; }
     public ImportItemStatus Status { get; private set; }
     public ImportMatchHint MatchHint { get; private set; }
     public Guid? MatchedProductId { get; private set; }
@@ -512,6 +515,38 @@ public sealed class ImportItem : AuditableEntity, IOrganizationScoped
     {
         EnsurePending();
         ApplyProposed(name, slug, sku, size, styleCode, teamName, seasonName, quantity, imageUrl);
+    }
+
+    public void ApplyGeneratedCopy(string kind, string output)
+    {
+        EnsurePending();
+        ArgumentException.ThrowIfNullOrWhiteSpace(output);
+        var text = AiOutputLimits.Bound(kind, output);
+        if (string.Equals(kind, AiContentKinds.Title, StringComparison.OrdinalIgnoreCase))
+        {
+            Name = text;
+            return;
+        }
+
+        if (string.Equals(kind, AiContentKinds.Description, StringComparison.OrdinalIgnoreCase))
+        {
+            Description = text;
+            return;
+        }
+
+        if (string.Equals(kind, AiContentKinds.SeoTitle, StringComparison.OrdinalIgnoreCase))
+        {
+            SeoTitle = text;
+            return;
+        }
+
+        if (string.Equals(kind, AiContentKinds.SeoDescription, StringComparison.OrdinalIgnoreCase))
+        {
+            SeoDescription = text;
+            return;
+        }
+
+        throw new InvalidOperationException($"Cannot apply AI kind '{kind}' to an import item.");
     }
 
     public void SetMatch(ImportMatchHint hint, Guid? productId, Guid? variantId)

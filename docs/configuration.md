@@ -38,6 +38,10 @@ Configuration is loaded from `appsettings*.json`, environment variables, and an 
 | `WooCommerce__ConsumerSecret` | WooCommerce REST consumer secret | Yes | When Woo channel enabled |
 | `WooCommerce__ApiVersion` | REST API version path segment (default `v3`) | No | When publishing to Woo |
 | `Import__Scrape__Engine` | Scrape engine (`Fixture` local/CI default, or `Playwright`) | No | When using scrape suppliers |
+| `Ai__Provider` | AI engine (`Fixture` local/CI default, or `OpenAI`) | No | When using AI content |
+| `Ai__OpenAI__ApiKey` | OpenAI API key; empty is valid for Fixture | Yes | When `Provider=OpenAI` |
+| `Ai__OpenAI__Model` | Chat Completions model (default `gpt-4o-mini`) | No | When `Provider=OpenAI` |
+| `Ai__OpenAI__BaseUrl` | Chat Completions base URL | No | When `Provider=OpenAI` |
 
 ## Rules
 

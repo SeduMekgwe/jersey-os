@@ -8,6 +8,7 @@
 - **Catalog:** products, variants (unit price, cost, compare-at), pricing rules (markup/margin/compare-at, optional channel overrides), SEO metadata, collections (manual + taxonomy membership), taxonomy (team/season/category/tag), images, inventory levels; org default currency.
 - **Import:** suppliers (upload + HTTP + Playwright scrape feeds), CSV/JSON batches, scrape run logs, review-queue items, approve-to-draft catalog writes.
 - **Publishing:** sales channels, external ID maps, publish runs, outbound sync to Shopify and WooCommerce, inbound Shopify order/fulfillment/refund webhooks for inventory reservation.
+- **AI:** prompt templates, generation jobs (titles/descriptions/SEO/alt text), operator approve-before-apply onto catalog or import items.
 - **Operations:** scheduled work, operational workflows, and their status.
 - **Notifications:** message intent, templates, delivery attempts, provider adapters.
 - **Audit:** append-only security and business audit records.

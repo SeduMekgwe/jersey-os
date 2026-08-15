@@ -526,6 +526,9 @@ public static class ImportMapping
             item.SeasonName,
             item.Quantity,
             item.ImageUrl,
+            item.Description,
+            item.SeoTitle,
+            item.SeoDescription,
             item.MatchedProductId,
             item.MatchedVariantId,
             item.AppliedProductId,
@@ -662,6 +665,8 @@ public static class ImportApply
                 priced.CompareAtAmount);
         }
 
+        ApplyImportCopy(product, item, now);
+
         if (item.Quantity is > 0)
         {
             var delta = item.Quantity.Value - variant.Inventory.OnHand;
@@ -678,6 +683,23 @@ public static class ImportApply
 
         item.MarkApplied(product.Id, variant.Id);
         item.Batch.RefreshCompletion();
+    }
+
+    private static void ApplyImportCopy(Product product, ImportItem item, DateTimeOffset now)
+    {
+        if (!string.IsNullOrWhiteSpace(item.Description))
+        {
+            product.SetDescription(item.Description, now);
+        }
+
+        if (!string.IsNullOrWhiteSpace(item.SeoTitle) || !string.IsNullOrWhiteSpace(item.SeoDescription))
+        {
+            product.SetSeo(
+                item.SeoTitle ?? product.SeoTitle,
+                item.SeoDescription ?? product.SeoDescription,
+                product.SeoHandle,
+                now);
+        }
     }
 
     private static async Task<(decimal? PriceAmount, decimal? CostAmount, decimal? CompareAtAmount)> ResolveImportPricingAsync(

@@ -55,6 +55,8 @@ public static class Permissions
     public const string ImportReview = "import.review";
     public const string PublishingRead = "publishing.read";
     public const string PublishingManage = "publishing.manage";
+    public const string AiRead = "ai.read";
+    public const string AiWrite = "ai.write";
     public static readonly string[] All =
     [
         PlatformRead,
@@ -69,7 +71,9 @@ public static class Permissions
         ImportUpload,
         ImportReview,
         PublishingRead,
-        PublishingManage
+        PublishingManage,
+        AiRead,
+        AiWrite
     ];
 }
 
@@ -114,6 +118,8 @@ public sealed class JerseyOsDbContext(
     public DbSet<ExternalIdMap> ExternalIdMapsSet => Set<ExternalIdMap>();
     public DbSet<PublishRun> PublishRunsSet => Set<PublishRun>();
     public DbSet<WebhookDelivery> WebhookDeliveriesSet => Set<WebhookDelivery>();
+    public DbSet<AiPromptTemplate> AiPromptTemplatesSet => Set<AiPromptTemplate>();
+    public DbSet<AiGeneration> AiGenerationsSet => Set<AiGeneration>();
 
     IQueryable<Organization> IApplicationDbContext.Organizations => OrganizationsSet;
     IQueryable<RefreshTokenSession> IApplicationDbContext.RefreshTokenSessions => RefreshTokenSessionsSet;
@@ -137,6 +143,8 @@ public sealed class JerseyOsDbContext(
     IQueryable<ExternalIdMap> IApplicationDbContext.ExternalIdMaps => ExternalIdMapsSet;
     IQueryable<PublishRun> IApplicationDbContext.PublishRuns => PublishRunsSet;
     IQueryable<WebhookDelivery> IApplicationDbContext.WebhookDeliveries => WebhookDeliveriesSet;
+    IQueryable<AiPromptTemplate> IApplicationDbContext.AiPromptTemplates => AiPromptTemplatesSet;
+    IQueryable<AiGeneration> IApplicationDbContext.AiGenerations => AiGenerationsSet;
 
     void IApplicationDbContext.Add<TEntity>(TEntity entity) => Set<TEntity>().Add(entity);
     void IApplicationDbContext.Remove<TEntity>(TEntity entity) => Set<TEntity>().Remove(entity);
@@ -221,6 +229,7 @@ public sealed class JerseyOsDbContext(
         builder.ConfigureCatalog(EffectiveOrganizationId);
         builder.ConfigureImport(EffectiveOrganizationId);
         builder.ConfigurePublishing(EffectiveOrganizationId);
+        builder.ConfigureAi(EffectiveOrganizationId);
 
         foreach (var entityType in builder.Model.GetEntityTypes()
                      .Where(t => typeof(IAuditableEntity).IsAssignableFrom(t.ClrType)))
@@ -574,6 +583,7 @@ public static class DependencyInjection
         services.AddScoped<IIntegrationEventPublisher>(sp => sp.GetRequiredService<OutboxIntegrationEventPublisher>());
         services.AddObjectStorage(configuration);
         services.AddImportServices(configuration);
+        services.AddAiServices(configuration);
         services.AddPublishingServices(configuration);
         services.AddDbContext<JerseyOsDbContext>(o => o.UseSqlServer(connectionString));
         services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<JerseyOsDbContext>());
@@ -633,7 +643,9 @@ public static class DependencyInjection
                 .AddPolicy(Permissions.ImportUpload, p => p.RequireClaim("permission", Permissions.ImportUpload))
                 .AddPolicy(Permissions.ImportReview, p => p.RequireClaim("permission", Permissions.ImportReview))
                 .AddPolicy(Permissions.PublishingRead, p => p.RequireClaim("permission", Permissions.PublishingRead))
-                .AddPolicy(Permissions.PublishingManage, p => p.RequireClaim("permission", Permissions.PublishingManage));
+                .AddPolicy(Permissions.PublishingManage, p => p.RequireClaim("permission", Permissions.PublishingManage))
+                .AddPolicy(Permissions.AiRead, p => p.RequireClaim("permission", Permissions.AiRead))
+                .AddPolicy(Permissions.AiWrite, p => p.RequireClaim("permission", Permissions.AiWrite));
         }
         return services;
     }

@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: Jersey OS API
   version: 1.0.0
-  description: Platform, catalog, supplier import, and publishing HTTP contract for Jersey OS.
+  description: Platform, catalog, supplier import, AI content, and publishing HTTP contract for Jersey OS.
 servers:
   - url: /api/v1
 paths:
@@ -1146,6 +1146,109 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/WebhookDeliveryResponse'
+  /ai/templates:
+    get:
+      operationId: listAiPromptTemplates
+      tags: [AI]
+      summary: List enabled prompt templates
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Prompt templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AiPromptTemplateResponse'
+  /ai/generations:
+    get:
+      operationId: listAiGenerations
+      tags: [AI]
+      summary: List recent AI generations
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: targetType
+          in: query
+          schema: { type: string }
+        - name: targetId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Generations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AiGenerationResponse'
+    post:
+      operationId: createAiGeneration
+      tags: [AI]
+      summary: Enqueue an AI generation for operator review
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAiGenerationRequest'
+      responses:
+        '201':
+          description: Enqueued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiGenerationResponse'
+        '400':
+          description: Validation or business rule failure
+  /ai/generations/{generationId}/approve:
+    post:
+      operationId: approveAiGeneration
+      tags: [AI]
+      summary: Approve a generation and apply it to the target
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: generationId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Applied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiGenerationResponse'
+        '404':
+          description: Not found
+  /ai/generations/{generationId}/reject:
+    post:
+      operationId: rejectAiGeneration
+      tags: [AI]
+      summary: Reject a generation without applying it
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: generationId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RejectAiGenerationRequest'
+      responses:
+        '200':
+          description: Rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiGenerationResponse'
+        '404':
+          description: Not found
 components:
   securitySchemes:
     bearerAuth:
@@ -1307,6 +1410,7 @@ components:
         seoTitle: { type: string, nullable: true }
         seoDescription: { type: string, nullable: true }
         seoHandle: { type: string, nullable: true }
+        description: { type: string, nullable: true }
         categoryIds:
           type: array
           items: { type: string, format: uuid }
@@ -1383,6 +1487,7 @@ components:
         seoTitle: { type: string, nullable: true }
         seoDescription: { type: string, nullable: true }
         seoHandle: { type: string, nullable: true }
+        description: { type: string, nullable: true }
     UpsertVariantRequest:
       type: object
       required: [sku, size, sortOrder]
@@ -1603,6 +1708,9 @@ components:
         seasonName: { type: string, nullable: true }
         quantity: { type: integer, nullable: true }
         imageUrl: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        seoTitle: { type: string, nullable: true }
+        seoDescription: { type: string, nullable: true }
         matchedProductId: { type: string, format: uuid, nullable: true }
         matchedVariantId: { type: string, format: uuid, nullable: true }
         appliedProductId: { type: string, format: uuid, nullable: true }
@@ -1685,3 +1793,44 @@ components:
         error: { type: string, nullable: true }
         processedAtUtc: { type: string, format: date-time, nullable: true }
         createdAtUtc: { type: string, format: date-time }
+    AiPromptTemplateResponse:
+      type: object
+      required: [id, name, kind, systemPrompt, userPromptTemplate, isEnabled]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        kind: { type: string }
+        systemPrompt: { type: string }
+        userPromptTemplate: { type: string }
+        isEnabled: { type: boolean }
+    AiGenerationResponse:
+      type: object
+      required: [id, kind, targetType, targetId, status, promptTokens, completionTokens, estimatedCostUsd, correlationId, createdAtUtc]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string }
+        targetType: { type: string }
+        targetId: { type: string, format: uuid }
+        status: { type: string }
+        outputText: { type: string, nullable: true }
+        model: { type: string, nullable: true }
+        promptTokens: { type: integer }
+        completionTokens: { type: integer }
+        estimatedCostUsd: { type: number, format: decimal }
+        error: { type: string, nullable: true }
+        correlationId: { type: string }
+        createdAtUtc: { type: string, format: date-time }
+        completedAtUtc: { type: string, format: date-time, nullable: true }
+        appliedAtUtc: { type: string, format: date-time, nullable: true }
+    CreateAiGenerationRequest:
+      type: object
+      required: [kind, targetType, targetId]
+      properties:
+        kind: { type: string }
+        targetType: { type: string }
+        targetId: { type: string, format: uuid }
+        promptTemplateId: { type: string, format: uuid, nullable: true }
+    RejectAiGenerationRequest:
+      type: object
+      properties:
+        note: { type: string, nullable: true }
