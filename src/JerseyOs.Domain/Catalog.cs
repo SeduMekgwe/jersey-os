@@ -151,6 +151,9 @@ public sealed class Product : AuditableEntity, IOrganizationScoped
     public ProductStatus Status { get; private set; }
     public Guid? TeamId { get; private set; }
     public Guid? SeasonId { get; private set; }
+    public string? SeoTitle { get; private set; }
+    public string? SeoDescription { get; private set; }
+    public string? SeoHandle { get; private set; }
     public Team? Team { get; private set; }
     public Season? Season { get; private set; }
     public IReadOnlyCollection<ProductVariant> Variants => _variants.AsReadOnly();
@@ -170,6 +173,21 @@ public sealed class Product : AuditableEntity, IOrganizationScoped
         ApplyIdentity(name, slug, styleCode);
         TeamId = teamId;
         SeasonId = seasonId;
+        Raise(new ProductUpdated(Id, OrganizationId, now));
+    }
+
+    public void SetSeo(string? seoTitle, string? seoDescription, string? seoHandle, DateTimeOffset now)
+    {
+        EnsureNotArchived();
+        SeoTitle = string.IsNullOrWhiteSpace(seoTitle) ? null : seoTitle.Trim();
+        SeoDescription = string.IsNullOrWhiteSpace(seoDescription) ? null : seoDescription.Trim();
+        var handle = string.IsNullOrWhiteSpace(seoHandle) ? null : seoHandle.Trim().ToLowerInvariant();
+        if (handle is not null && handle.Length > 100)
+        {
+            throw new InvalidOperationException("SEO handle cannot exceed 100 characters.");
+        }
+
+        SeoHandle = handle;
         Raise(new ProductUpdated(Id, OrganizationId, now));
     }
 

@@ -442,6 +442,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/catalog/collections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List catalog collections */
+        get: operations["listCollections"];
+        put?: never;
+        /** Create a collection */
+        post: operations["createCollection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/catalog/collections/{collectionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a collection and resolved members */
+        get: operations["getCollection"];
+        /** Update a collection */
+        put: operations["updateCollection"];
+        post?: never;
+        /** Delete a collection */
+        delete: operations["deleteCollection"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/inventory/variants/{variantId}/adjust": {
         parameters: {
             query?: never;
@@ -817,8 +854,12 @@ export interface components {
             teamId?: string | null;
             /** Format: uuid */
             seasonId?: string | null;
+            seoTitle?: string | null;
+            seoDescription?: string | null;
+            seoHandle?: string | null;
             categoryIds: string[];
             tagIds: string[];
+            collectionIds: string[];
             variants: components["schemas"]["ProductVariantResponse"][];
             images: components["schemas"]["ProductImageResponse"][];
         };
@@ -851,6 +892,9 @@ export interface components {
             seasonId?: string | null;
             categoryIds?: string[];
             tagIds?: string[];
+            seoTitle?: string | null;
+            seoDescription?: string | null;
+            seoHandle?: string | null;
         };
         UpdateProductRequest: {
             name: string;
@@ -862,6 +906,9 @@ export interface components {
             seasonId?: string | null;
             categoryIds?: string[];
             tagIds?: string[];
+            seoTitle?: string | null;
+            seoDescription?: string | null;
+            seoHandle?: string | null;
         };
         UpsertVariantRequest: {
             /** Format: uuid */
@@ -931,6 +978,55 @@ export interface components {
             sellRuleId?: string | null;
             /** Format: uuid */
             compareAtRuleId?: string | null;
+        };
+        CollectionResponse: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            slug: string;
+            description?: string | null;
+            /** @enum {string} */
+            membershipKind: "Manual" | "Taxonomy";
+            /** Format: uuid */
+            teamId?: string | null;
+            /** Format: uuid */
+            seasonId?: string | null;
+            /** Format: uuid */
+            categoryId?: string | null;
+            /** Format: uuid */
+            tagId?: string | null;
+            productIds: string[];
+            memberCount: number;
+        };
+        CreateCollectionRequest: {
+            name: string;
+            slug: string;
+            /** @enum {string} */
+            membershipKind: "Manual" | "Taxonomy";
+            description?: string | null;
+            /** Format: uuid */
+            teamId?: string | null;
+            /** Format: uuid */
+            seasonId?: string | null;
+            /** Format: uuid */
+            categoryId?: string | null;
+            /** Format: uuid */
+            tagId?: string | null;
+            productIds?: string[];
+        };
+        UpdateCollectionRequest: {
+            name: string;
+            slug: string;
+            description?: string | null;
+            /** Format: uuid */
+            teamId?: string | null;
+            /** Format: uuid */
+            seasonId?: string | null;
+            /** Format: uuid */
+            categoryId?: string | null;
+            /** Format: uuid */
+            tagId?: string | null;
+            productIds?: string[];
         };
         ImageSortOrder: {
             /** Format: uuid */
@@ -2117,6 +2213,139 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TaxonomyItemResponse"];
                 };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listCollections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Collections */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionResponse"][];
+                };
+            };
+        };
+    };
+    createCollection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCollectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionResponse"];
+                };
+            };
+        };
+    };
+    getCollection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                collectionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Collection */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionResponse"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    updateCollection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                collectionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCollectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionResponse"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    deleteCollection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                collectionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Not found */
             404: {

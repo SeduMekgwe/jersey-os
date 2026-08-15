@@ -677,6 +677,104 @@ paths:
                 $ref: '#/components/schemas/TaxonomyItemResponse'
         '404':
           description: Not found
+  /catalog/collections:
+    get:
+      operationId: listCollections
+      tags: [Catalog]
+      summary: List catalog collections
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Collections
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CollectionResponse'
+    post:
+      operationId: createCollection
+      tags: [Catalog]
+      summary: Create a collection
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCollectionRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionResponse'
+  /catalog/collections/{collectionId}:
+    get:
+      operationId: getCollection
+      tags: [Catalog]
+      summary: Get a collection and resolved members
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: collectionId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Collection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionResponse'
+        '404':
+          description: Not found
+    put:
+      operationId: updateCollection
+      tags: [Catalog]
+      summary: Update a collection
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: collectionId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCollectionRequest'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionResponse'
+        '404':
+          description: Not found
+    delete:
+      operationId: deleteCollection
+      tags: [Catalog]
+      summary: Delete a collection
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: collectionId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Not found
   /inventory/variants/{variantId}/adjust:
     post:
       operationId: adjustInventory
@@ -1196,7 +1294,7 @@ components:
         sortOrder: { type: integer }
     ProductResponse:
       type: object
-      required: [id, name, slug, status, currency, categoryIds, tagIds, variants, images]
+      required: [id, name, slug, status, currency, categoryIds, tagIds, collectionIds, variants, images]
       properties:
         id: { type: string, format: uuid }
         name: { type: string }
@@ -1206,10 +1304,16 @@ components:
         currency: { type: string, minLength: 3, maxLength: 3 }
         teamId: { type: string, format: uuid, nullable: true }
         seasonId: { type: string, format: uuid, nullable: true }
+        seoTitle: { type: string, nullable: true }
+        seoDescription: { type: string, nullable: true }
+        seoHandle: { type: string, nullable: true }
         categoryIds:
           type: array
           items: { type: string, format: uuid }
         tagIds:
+          type: array
+          items: { type: string, format: uuid }
+        collectionIds:
           type: array
           items: { type: string, format: uuid }
         variants:
@@ -1258,6 +1362,9 @@ components:
         tagIds:
           type: array
           items: { type: string, format: uuid }
+        seoTitle: { type: string, nullable: true }
+        seoDescription: { type: string, nullable: true }
+        seoHandle: { type: string, nullable: true }
     UpdateProductRequest:
       type: object
       required: [name, slug]
@@ -1273,6 +1380,9 @@ components:
         tagIds:
           type: array
           items: { type: string, format: uuid }
+        seoTitle: { type: string, nullable: true }
+        seoDescription: { type: string, nullable: true }
+        seoHandle: { type: string, nullable: true }
     UpsertVariantRequest:
       type: object
       required: [sku, size, sortOrder]
@@ -1335,6 +1445,56 @@ components:
         compareAtAmount: { type: number, format: decimal, nullable: true }
         sellRuleId: { type: string, format: uuid, nullable: true }
         compareAtRuleId: { type: string, format: uuid, nullable: true }
+    CollectionResponse:
+      type: object
+      required: [id, name, slug, membershipKind, productIds, memberCount]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        description: { type: string, nullable: true }
+        membershipKind:
+          type: string
+          enum: [Manual, Taxonomy]
+        teamId: { type: string, format: uuid, nullable: true }
+        seasonId: { type: string, format: uuid, nullable: true }
+        categoryId: { type: string, format: uuid, nullable: true }
+        tagId: { type: string, format: uuid, nullable: true }
+        productIds:
+          type: array
+          items: { type: string, format: uuid }
+        memberCount: { type: integer }
+    CreateCollectionRequest:
+      type: object
+      required: [name, slug, membershipKind]
+      properties:
+        name: { type: string }
+        slug: { type: string }
+        membershipKind:
+          type: string
+          enum: [Manual, Taxonomy]
+        description: { type: string, nullable: true }
+        teamId: { type: string, format: uuid, nullable: true }
+        seasonId: { type: string, format: uuid, nullable: true }
+        categoryId: { type: string, format: uuid, nullable: true }
+        tagId: { type: string, format: uuid, nullable: true }
+        productIds:
+          type: array
+          items: { type: string, format: uuid }
+    UpdateCollectionRequest:
+      type: object
+      required: [name, slug]
+      properties:
+        name: { type: string }
+        slug: { type: string }
+        description: { type: string, nullable: true }
+        teamId: { type: string, format: uuid, nullable: true }
+        seasonId: { type: string, format: uuid, nullable: true }
+        categoryId: { type: string, format: uuid, nullable: true }
+        tagId: { type: string, format: uuid, nullable: true }
+        productIds:
+          type: array
+          items: { type: string, format: uuid }
     ImageSortOrder:
       type: object
       required: [imageId, sortOrder]

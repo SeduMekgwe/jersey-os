@@ -105,7 +105,7 @@ erDiagram
   PRODUCT_VARIANT ||--|| INVENTORY_LEVEL : tracks
 ```
 
-Unique constraints include `(organization_id, slug)` on products and taxonomy, and `(organization_id, sku)` on variants. Inventory concurrency uses a SQL Server `rowversion` token. Variant money fields are `price_amount`, `cost_amount`, and `compare_at_amount` (`decimal(18,2)`, nullable). Org pricing rules live in `catalog_pricing_rules`. Organization `DefaultCurrency` supplies the ISO 4217 code for catalog and publish.
+Unique constraints include `(organization_id, slug)` on products, collections, and taxonomy, and `(organization_id, sku)` on variants. Inventory concurrency uses a SQL Server `rowversion` token. Variant money fields are `price_amount`, `cost_amount`, and `compare_at_amount` (`decimal(18,2)`, nullable). Org pricing rules live in `catalog_pricing_rules`. Product SEO is `seo_title`, `seo_description`, `seo_handle`. Collections are `catalog_collections` plus `catalog_collection_products` for manual members. Organization `DefaultCurrency` supplies the ISO 4217 code for catalog and publish.
 
 ## Import model
 

@@ -30,8 +30,12 @@ public sealed record ProductResponse(
     string Currency,
     Guid? TeamId,
     Guid? SeasonId,
+    string? SeoTitle,
+    string? SeoDescription,
+    string? SeoHandle,
     IReadOnlyCollection<Guid> CategoryIds,
     IReadOnlyCollection<Guid> TagIds,
+    IReadOnlyCollection<Guid> CollectionIds,
     IReadOnlyCollection<ProductVariantResponse> Variants,
     IReadOnlyCollection<ProductImageResponse> Images);
 public sealed record ProductSummaryResponse(
@@ -56,7 +60,10 @@ public sealed record CreateProductRequest(
     Guid? TeamId,
     Guid? SeasonId,
     IReadOnlyCollection<Guid>? CategoryIds,
-    IReadOnlyCollection<Guid>? TagIds);
+    IReadOnlyCollection<Guid>? TagIds,
+    string? SeoTitle = null,
+    string? SeoDescription = null,
+    string? SeoHandle = null);
 public sealed record UpdateProductRequest(
     string Name,
     string Slug,
@@ -64,7 +71,10 @@ public sealed record UpdateProductRequest(
     Guid? TeamId,
     Guid? SeasonId,
     IReadOnlyCollection<Guid>? CategoryIds,
-    IReadOnlyCollection<Guid>? TagIds);
+    IReadOnlyCollection<Guid>? TagIds,
+    string? SeoTitle = null,
+    string? SeoDescription = null,
+    string? SeoHandle = null);
 public sealed record UpsertVariantRequest(
     Guid? Id,
     string Sku,
@@ -109,3 +119,35 @@ public sealed record PricePreviewResponse(
     decimal? CompareAtAmount,
     Guid? SellRuleId,
     Guid? CompareAtRuleId);
+
+public sealed record CollectionResponse(
+    Guid Id,
+    string Name,
+    string Slug,
+    string? Description,
+    string MembershipKind,
+    Guid? TeamId,
+    Guid? SeasonId,
+    Guid? CategoryId,
+    Guid? TagId,
+    IReadOnlyCollection<Guid> ProductIds,
+    int MemberCount);
+public sealed record CreateCollectionRequest(
+    string Name,
+    string Slug,
+    string MembershipKind,
+    string? Description = null,
+    Guid? TeamId = null,
+    Guid? SeasonId = null,
+    Guid? CategoryId = null,
+    Guid? TagId = null,
+    IReadOnlyCollection<Guid>? ProductIds = null);
+public sealed record UpdateCollectionRequest(
+    string Name,
+    string Slug,
+    string? Description,
+    Guid? TeamId,
+    Guid? SeasonId,
+    Guid? CategoryId,
+    Guid? TagId,
+    IReadOnlyCollection<Guid>? ProductIds);

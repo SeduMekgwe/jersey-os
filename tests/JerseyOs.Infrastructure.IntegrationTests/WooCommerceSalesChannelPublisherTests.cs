@@ -47,7 +47,10 @@ public sealed class WooCommerceSalesChannelPublisherTests
                 "2025-26",
                 ["https://cdn.example/kit.jpg"],
                 [new PublishVariantInput(variantId, "HOME-M", "M", 3, 1299.00m, null, "ZAR", null)],
-                null),
+                null,
+                "home-kit",
+                "Home Kit SEO",
+                "Official home jersey."),
             CancellationToken.None);
 
         Assert.Equal("10", result.ExternalProductId);
@@ -56,6 +59,8 @@ public sealed class WooCommerceSalesChannelPublisherTests
         Assert.Contains(calls, c => c.Body.Contains("variable", StringComparison.Ordinal));
         Assert.Contains(calls, c => c.Body.Contains("HOME-M", StringComparison.Ordinal));
         Assert.Contains(calls, c => c.Body.Contains("1299.00", StringComparison.Ordinal));
+        Assert.Contains(calls, c => c.Body.Contains("home-kit", StringComparison.Ordinal));
+        Assert.Contains(calls, c => c.Body.Contains("Home Kit SEO", StringComparison.Ordinal));
         Assert.Contains(
             calls,
             c => c.Method == HttpMethod.Post && c.Url.Contains("/products/10/variations", StringComparison.Ordinal));

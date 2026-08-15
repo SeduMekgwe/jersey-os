@@ -25,7 +25,18 @@ public sealed record PublishProductInput(
     string? SeasonName,
     IReadOnlyList<string> ImageUrls,
     IReadOnlyList<PublishVariantInput> Variants,
-    string? ExternalProductId);
+    string? ExternalProductId,
+    string? Handle = null,
+    string? SeoTitle = null,
+    string? SeoDescription = null,
+    IReadOnlyList<string>? CollectionExternalIds = null);
+
+public sealed record PublishCollectionInput(
+    Guid CollectionId,
+    string Title,
+    string Handle,
+    string? Description,
+    string? ExternalCollectionId);
 
 public sealed record PublishProductResult(
     string ExternalProductId,
@@ -36,6 +47,7 @@ public interface ISalesChannelPublisher
     Task<PublishProductResult> UpsertProductAsync(PublishProductInput input, CancellationToken cancellationToken);
     Task UnpublishProductAsync(string externalProductId, CancellationToken cancellationToken);
     Task SetInventoryAsync(string externalVariantId, int availableQuantity, CancellationToken cancellationToken);
+    Task<string> UpsertCollectionAsync(PublishCollectionInput input, CancellationToken cancellationToken);
 }
 
 /// <summary>

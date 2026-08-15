@@ -108,6 +108,8 @@ public sealed class JerseyOsDbContext(
     public DbSet<ImportItem> ImportItemsSet => Set<ImportItem>();
     public DbSet<SupplierScrapeRun> SupplierScrapeRunsSet => Set<SupplierScrapeRun>();
     public DbSet<PricingRule> PricingRulesSet => Set<PricingRule>();
+    public DbSet<Collection> CollectionsSet => Set<Collection>();
+    public DbSet<CollectionProduct> CollectionProductsSet => Set<CollectionProduct>();
     public DbSet<SalesChannel> SalesChannelsSet => Set<SalesChannel>();
     public DbSet<ExternalIdMap> ExternalIdMapsSet => Set<ExternalIdMap>();
     public DbSet<PublishRun> PublishRunsSet => Set<PublishRun>();
@@ -129,6 +131,8 @@ public sealed class JerseyOsDbContext(
     IQueryable<ImportItem> IApplicationDbContext.ImportItems => ImportItemsSet;
     IQueryable<SupplierScrapeRun> IApplicationDbContext.SupplierScrapeRuns => SupplierScrapeRunsSet;
     IQueryable<PricingRule> IApplicationDbContext.PricingRules => PricingRulesSet;
+    IQueryable<Collection> IApplicationDbContext.Collections => CollectionsSet;
+    IQueryable<CollectionProduct> IApplicationDbContext.CollectionProducts => CollectionProductsSet;
     IQueryable<SalesChannel> IApplicationDbContext.SalesChannels => SalesChannelsSet;
     IQueryable<ExternalIdMap> IApplicationDbContext.ExternalIdMaps => ExternalIdMapsSet;
     IQueryable<PublishRun> IApplicationDbContext.PublishRuns => PublishRunsSet;

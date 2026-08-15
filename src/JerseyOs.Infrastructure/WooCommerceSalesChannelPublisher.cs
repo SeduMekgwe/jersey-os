@@ -38,12 +38,15 @@ public sealed class WooCommerceSalesChannelPublisher(
             ["name"] = input.Title,
             ["type"] = "variable",
             ["status"] = "publish",
+            ["slug"] = string.IsNullOrWhiteSpace(input.Handle) ? null : input.Handle,
             ["description"] = BuildDescription(input),
+            ["short_description"] = string.IsNullOrWhiteSpace(input.SeoDescription) ? null : input.SeoDescription,
             ["sku"] = string.IsNullOrWhiteSpace(input.StyleCode) ? null : input.StyleCode,
             ["images"] = input.ImageUrls
                 .Where(u => !string.IsNullOrWhiteSpace(u))
                 .Select(u => new Dictionary<string, string> { ["src"] = u })
                 .ToArray(),
+            ["categories"] = BuildCategories(input),
             ["attributes"] = new object[]
             {
                 new Dictionary<string, object?>
@@ -136,6 +139,35 @@ public sealed class WooCommerceSalesChannelPublisher(
         }
 
         return new PublishProductResult(productId, variantExternalIds);
+    }
+
+    public async Task<string> UpsertCollectionAsync(
+        PublishCollectionInput input, CancellationToken cancellationToken)
+    {
+        EnsureConfigured();
+        var body = new Dictionary<string, object?>
+        {
+            ["name"] = input.Title,
+            ["slug"] = input.Handle,
+            ["description"] = input.Description
+        };
+        JsonElement category;
+        if (!string.IsNullOrWhiteSpace(input.ExternalCollectionId))
+        {
+            category = await SendAsync(
+                    HttpMethod.Put,
+                    $"products/categories/{input.ExternalCollectionId}",
+                    body,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        else
+        {
+            category = await SendAsync(HttpMethod.Post, "products/categories", body, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return category.GetProperty("id").GetInt64().ToString(CultureInfo.InvariantCulture);
     }
 
     public async Task UnpublishProductAsync(string externalProductId, CancellationToken cancellationToken)
@@ -256,11 +288,41 @@ public sealed class WooCommerceSalesChannelPublisher(
             meta.Add(new Dictionary<string, string> { ["key"] = "season", ["value"] = input.SeasonName });
         }
 
+        if (!string.IsNullOrWhiteSpace(input.SeoTitle))
+        {
+            meta.Add(new Dictionary<string, string> { ["key"] = "_yoast_wpseo_title", ["value"] = input.SeoTitle });
+        }
+
+        if (!string.IsNullOrWhiteSpace(input.SeoDescription))
+        {
+            meta.Add(new Dictionary<string, string>
+            {
+                ["key"] = "_yoast_wpseo_metadesc",
+                ["value"] = input.SeoDescription
+            });
+        }
+
         return meta.ToArray<object>();
+    }
+
+    private static object[]? BuildCategories(PublishProductInput input)
+    {
+        var ids = (input.CollectionExternalIds ?? [])
+            .Where(id => long.TryParse(id, NumberStyles.Integer, CultureInfo.InvariantCulture, out _))
+            .Select(id => new Dictionary<string, object?>
+            {
+                ["id"] = long.Parse(id, CultureInfo.InvariantCulture)
+            })
+            .ToArray();
+        return ids.Length == 0 ? null : ids;
     }
 
     private static string BuildDescription(PublishProductInput input)
     {
+        if (!string.IsNullOrWhiteSpace(input.SeoDescription))
+        {
+            return input.SeoDescription;
+        }
         var parts = new List<string>();
         if (!string.IsNullOrWhiteSpace(input.TeamName))
         {

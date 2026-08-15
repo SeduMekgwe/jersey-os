@@ -50,7 +50,10 @@ public sealed class CatalogController(ISender sender) : ControllerBase
                 request.TeamId,
                 request.SeasonId,
                 request.CategoryIds,
-                request.TagIds),
+                request.TagIds,
+                request.SeoTitle,
+                request.SeoDescription,
+                request.SeoHandle),
             cancellationToken);
         return CreatedAtAction(nameof(Get), new { productId = product.Id, version = "1.0" }, product);
     }
@@ -71,7 +74,10 @@ public sealed class CatalogController(ISender sender) : ControllerBase
                 request.TeamId,
                 request.SeasonId,
                 request.CategoryIds,
-                request.TagIds),
+                request.TagIds,
+                request.SeoTitle,
+                request.SeoDescription,
+                request.SeoHandle),
             cancellationToken);
         return product is null ? NotFound() : Ok(product);
     }
@@ -253,6 +259,74 @@ public sealed class CatalogController(ISender sender) : ControllerBase
     {
         var item = await sender.Send(new UpdateTagCommand(id, request.Name, request.Slug), cancellationToken);
         return item is null ? NotFound() : Ok(item);
+    }
+
+    [HttpGet("collections")]
+    [ProducesResponseType<IReadOnlyCollection<CollectionResponse>>(StatusCodes.Status200OK)]
+    public Task<IReadOnlyCollection<CollectionResponse>> ListCollections(CancellationToken cancellationToken) =>
+        sender.Send(new ListCollectionsQuery(), cancellationToken);
+
+    [HttpGet("collections/{collectionId:guid}")]
+    [ProducesResponseType<CollectionResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<CollectionResponse>> GetCollection(
+        Guid collectionId, CancellationToken cancellationToken)
+    {
+        var collection = await sender.Send(new GetCollectionQuery(collectionId), cancellationToken);
+        return collection is null ? NotFound() : Ok(collection);
+    }
+
+    [HttpPost("collections")]
+    [Authorize(Policy = Permissions.CatalogWrite)]
+    [ProducesResponseType<CollectionResponse>(StatusCodes.Status201Created)]
+    public async Task<ActionResult<CollectionResponse>> CreateCollection(
+        CreateCollectionRequest request, CancellationToken cancellationToken)
+    {
+        var collection = await sender.Send(
+            new CreateCollectionCommand(
+                request.Name,
+                request.Slug,
+                request.MembershipKind,
+                request.Description,
+                request.TeamId,
+                request.SeasonId,
+                request.CategoryId,
+                request.TagId,
+                request.ProductIds),
+            cancellationToken);
+        return CreatedAtAction(nameof(GetCollection), new { collectionId = collection.Id, version = "1.0" }, collection);
+    }
+
+    [HttpPut("collections/{collectionId:guid}")]
+    [Authorize(Policy = Permissions.CatalogWrite)]
+    [ProducesResponseType<CollectionResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<CollectionResponse>> UpdateCollection(
+        Guid collectionId, UpdateCollectionRequest request, CancellationToken cancellationToken)
+    {
+        var collection = await sender.Send(
+            new UpdateCollectionCommand(
+                collectionId,
+                request.Name,
+                request.Slug,
+                request.Description,
+                request.TeamId,
+                request.SeasonId,
+                request.CategoryId,
+                request.TagId,
+                request.ProductIds),
+            cancellationToken);
+        return collection is null ? NotFound() : Ok(collection);
+    }
+
+    [HttpDelete("collections/{collectionId:guid}")]
+    [Authorize(Policy = Permissions.CatalogWrite)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteCollection(Guid collectionId, CancellationToken cancellationToken)
+    {
+        var deleted = await sender.Send(new DeleteCollectionCommand(collectionId), cancellationToken);
+        return deleted ? NoContent() : NotFound();
     }
 }
 

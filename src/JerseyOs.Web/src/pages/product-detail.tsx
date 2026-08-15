@@ -30,6 +30,9 @@ export function ProductDetailPage() {
   const [styleCode, setStyleCode] = useState('');
   const [teamId, setTeamId] = useState('');
   const [seasonId, setSeasonId] = useState('');
+  const [seoTitle, setSeoTitle] = useState('');
+  const [seoDescription, setSeoDescription] = useState('');
+  const [seoHandle, setSeoHandle] = useState('');
   const [sku, setSku] = useState('');
   const [size, setSize] = useState('M');
   const [priceAmount, setPriceAmount] = useState('');
@@ -73,6 +76,9 @@ export function ProductDetailPage() {
     setStyleCode(product.styleCode ?? '');
     setTeamId(product.teamId ?? '');
     setSeasonId(product.seasonId ?? '');
+    setSeoTitle(product.seoTitle ?? '');
+    setSeoDescription(product.seoDescription ?? '');
+    setSeoHandle(product.seoHandle ?? '');
   }, [product]);
 
   const createMutation = useMutation({
@@ -102,6 +108,9 @@ export function ProductDetailPage() {
           seasonId: seasonId || null,
           categoryIds: product?.categoryIds ?? [],
           tagIds: product?.tagIds ?? [],
+          seoTitle: seoTitle || null,
+          seoDescription: seoDescription || null,
+          seoHandle: seoHandle || null,
         }),
       }),
     onSuccess: () => {
@@ -274,6 +283,39 @@ export function ProductDetailPage() {
               </option>
             ))}
           </select>
+        </label>
+        <label className="grid gap-1 text-sm md:col-span-2">
+          SEO title
+          <Input
+            value={seoTitle}
+            onChange={(e) => {
+              setSeoTitle(e.target.value);
+            }}
+            disabled={!canWrite}
+            placeholder="Storefront title"
+          />
+        </label>
+        <label className="grid gap-1 text-sm">
+          SEO handle
+          <Input
+            value={seoHandle}
+            onChange={(e) => {
+              setSeoHandle(e.target.value);
+            }}
+            disabled={!canWrite}
+            placeholder="optional-handle"
+          />
+        </label>
+        <label className="grid gap-1 text-sm">
+          SEO description
+          <Input
+            value={seoDescription}
+            onChange={(e) => {
+              setSeoDescription(e.target.value);
+            }}
+            disabled={!canWrite}
+            placeholder="Meta description"
+          />
         </label>
         {(canWrite || canPublish) && (
           <div className="flex flex-wrap items-end gap-2 md:col-span-2">

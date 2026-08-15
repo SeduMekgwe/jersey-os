@@ -1,6 +1,7 @@
 import { createBrowserRouter } from 'react-router-dom';
 import { RequireAuth, RequirePermission } from '@/auth/guards';
 import { AppShell } from '@/components/app-shell';
+import { CollectionsPage } from '@/pages/collections';
 import { DashboardPage } from '@/pages/dashboard';
 import { ImportBatchDetailPage } from '@/pages/import-batch-detail';
 import { ImportBatchesPage } from '@/pages/import-batches';
@@ -33,6 +34,7 @@ export const router = createBrowserRouter([
               { path: 'products', element: <ProductsListPage /> },
               { path: 'products/:productId', element: <ProductDetailPage /> },
               { path: 'taxonomy', element: <TaxonomyPage /> },
+              { path: 'collections', element: <CollectionsPage /> },
             ],
           },
           {

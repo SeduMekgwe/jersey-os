@@ -130,6 +130,9 @@ public static class CatalogModelBuilder
             b.Property(x => x.Name).HasMaxLength(200).IsRequired();
             b.Property(x => x.Slug).HasMaxLength(100).IsRequired();
             b.Property(x => x.StyleCode).HasMaxLength(64);
+            b.Property(x => x.SeoTitle).HasMaxLength(200);
+            b.Property(x => x.SeoDescription).HasMaxLength(320);
+            b.Property(x => x.SeoHandle).HasMaxLength(100);
             b.Property(x => x.Status).HasConversion<string>().HasMaxLength(32);
             b.HasIndex(x => new { x.OrganizationId, x.Slug }).IsUnique();
             b.HasOne(x => x.Team).WithMany().HasForeignKey(x => x.TeamId).OnDelete(DeleteBehavior.Restrict);
@@ -200,6 +203,25 @@ public static class CatalogModelBuilder
             b.Property(x => x.PercentRate).HasPrecision(18, 4);
             b.HasIndex(x => new { x.OrganizationId, x.Name });
             b.HasIndex(x => new { x.OrganizationId, x.SalesChannelId, x.Kind, x.Priority });
+            b.HasQueryFilter(x => x.OrganizationId == effectiveOrganizationId);
+        });
+        builder.Entity<Collection>(b =>
+        {
+            b.ToTable("catalog_collections");
+            b.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            b.Property(x => x.Slug).HasMaxLength(100).IsRequired();
+            b.Property(x => x.Description).HasMaxLength(2000);
+            b.Property(x => x.MembershipKind).HasConversion<string>().HasMaxLength(32);
+            b.HasIndex(x => new { x.OrganizationId, x.Slug }).IsUnique();
+            b.HasMany(x => x.Products).WithOne(x => x.Collection).HasForeignKey(x => x.CollectionId)
+                .OnDelete(DeleteBehavior.Cascade);
+            b.Navigation(x => x.Products).HasField("_products").UsePropertyAccessMode(PropertyAccessMode.Field);
+            b.HasQueryFilter(x => x.OrganizationId == effectiveOrganizationId);
+        });
+        builder.Entity<CollectionProduct>(b =>
+        {
+            b.ToTable("catalog_collection_products");
+            b.HasIndex(x => new { x.CollectionId, x.ProductId }).IsUnique();
             b.HasQueryFilter(x => x.OrganizationId == effectiveOrganizationId);
         });
     }

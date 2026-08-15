@@ -87,6 +87,9 @@ public sealed class NullSalesChannelPublisher : ISalesChannelPublisher
 
     public Task SetInventoryAsync(string externalVariantId, int availableQuantity, CancellationToken cancellationToken) =>
         Task.CompletedTask;
+
+    public Task<string> UpsertCollectionAsync(PublishCollectionInput input, CancellationToken cancellationToken) =>
+        Task.FromResult(input.ExternalCollectionId ?? $"gid://shopify/Collection/{input.CollectionId:N}");
 }
 
 public sealed class ShopifySalesChannelPublisher(
@@ -105,6 +108,10 @@ public sealed class ShopifySalesChannelPublisher(
         var tags = new List<string>();
         if (!string.IsNullOrWhiteSpace(input.TeamName)) tags.Add(input.TeamName!);
         if (!string.IsNullOrWhiteSpace(input.SeasonName)) tags.Add(input.SeasonName!);
+
+        var handle = string.IsNullOrWhiteSpace(input.Handle) ? null : input.Handle.Trim().ToLowerInvariant();
+        var seoTitle = string.IsNullOrWhiteSpace(input.SeoTitle) ? null : input.SeoTitle.Trim();
+        var seoDescription = string.IsNullOrWhiteSpace(input.SeoDescription) ? null : input.SeoDescription.Trim();
 
         var variants = input.Variants.Select(v =>
         {
@@ -140,6 +147,17 @@ public sealed class ShopifySalesChannelPublisher(
             ["title"] = input.Title,
             ["status"] = "ACTIVE",
             ["tags"] = tags,
+            ["handle"] = handle,
+            ["seo"] = seoTitle is null && seoDescription is null
+                ? null
+                : new Dictionary<string, object?>
+                {
+                    ["title"] = seoTitle,
+                    ["description"] = seoDescription
+                },
+            ["collections"] = input.CollectionExternalIds is { Count: > 0 }
+                ? input.CollectionExternalIds.ToArray()
+                : null,
             ["productOptions"] = new[]
             {
                 new { name = "Size", values = input.Variants.Select(v => new { name = v.Size }).Distinct().ToArray() }
@@ -213,6 +231,64 @@ public sealed class ShopifySalesChannelPublisher(
         }
 
         return new PublishProductResult(externalProductId, mapped);
+    }
+
+    public async Task<string> UpsertCollectionAsync(
+        PublishCollectionInput input, CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(input.ExternalCollectionId))
+        {
+            const string update = """
+                mutation CollectionUpdate($input: CollectionInput!) {
+                  collectionUpdate(input: $input) {
+                    collection { id }
+                    userErrors { field message }
+                  }
+                }
+                """;
+            var updated = await SendGraphqlAsync(
+                    update,
+                    new
+                    {
+                        input = new
+                        {
+                            id = input.ExternalCollectionId,
+                            title = input.Title,
+                            handle = input.Handle,
+                            descriptionHtml = input.Description
+                        }
+                    },
+                    cancellationToken)
+                .ConfigureAwait(false);
+            ThrowIfUserErrors(updated.GetProperty("collectionUpdate"));
+            return updated.GetProperty("collectionUpdate").GetProperty("collection").GetProperty("id").GetString()
+                ?? input.ExternalCollectionId;
+        }
+
+        const string create = """
+            mutation CollectionCreate($input: CollectionInput!) {
+              collectionCreate(input: $input) {
+                collection { id }
+                userErrors { field message }
+              }
+            }
+            """;
+        var created = await SendGraphqlAsync(
+                create,
+                new
+                {
+                    input = new
+                    {
+                        title = input.Title,
+                        handle = input.Handle,
+                        descriptionHtml = input.Description
+                    }
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        ThrowIfUserErrors(created.GetProperty("collectionCreate"));
+        return created.GetProperty("collectionCreate").GetProperty("collection").GetProperty("id").GetString()
+            ?? throw new InvalidOperationException("Shopify collectionCreate returned no collection id.");
     }
 
     public async Task UnpublishProductAsync(string externalProductId, CancellationToken cancellationToken)
@@ -398,6 +474,8 @@ public sealed class PublishProductJob(
             .Include(x => x.Images)
             .Include(x => x.Team)
             .Include(x => x.Season)
+            .Include(x => x.Categories)
+            .Include(x => x.Tags)
             .SingleOrDefaultAsync(x => x.Id == productId && x.OrganizationId == organizationId, cancellationToken)
             .ConfigureAwait(false);
         if (product is null || product.Status == ProductStatus.Draft)
@@ -508,6 +586,38 @@ public sealed class PublishProductJob(
                 throw new InvalidOperationException("Active products require a price on every variant before publish.");
             }
 
+            var collections = await db.CollectionsSet.IgnoreQueryFilters()
+                .Include(x => x.Products)
+                .Where(x => x.OrganizationId == organizationId)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+            var matching = collections.Where(x => x.Includes(product)).ToArray();
+            var collectionExternalIds = new List<string>();
+            foreach (var collection in matching)
+            {
+                var collectionMap = await GetMapAsync(
+                        organizationId, channel.Id, PublishEntityTypes.Collection, collection.Id, cancellationToken)
+                    .ConfigureAwait(false);
+                var externalCollectionId = await publisher.UpsertCollectionAsync(
+                        new PublishCollectionInput(
+                            collection.Id,
+                            collection.Name,
+                            collection.Slug,
+                            collection.Description,
+                            collectionMap?.ExternalId),
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                await UpsertMapAsync(
+                        organizationId,
+                        channel.Id,
+                        PublishEntityTypes.Collection,
+                        collection.Id,
+                        externalCollectionId,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                collectionExternalIds.Add(externalCollectionId);
+            }
+
             var input = new PublishProductInput(
                 product.Id,
                 product.OrganizationId,
@@ -530,7 +640,11 @@ public sealed class PublishProductJob(
                         currency,
                         map?.ExternalId);
                 }).ToArray(),
-                productMap?.ExternalId);
+                productMap?.ExternalId,
+                product.SeoHandle ?? product.Slug,
+                product.SeoTitle,
+                product.SeoDescription,
+                collectionExternalIds);
 
             var result = await publisher.UpsertProductAsync(input, cancellationToken).ConfigureAwait(false);
             await UpsertMapAsync(

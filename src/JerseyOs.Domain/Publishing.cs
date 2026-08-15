@@ -21,6 +21,7 @@ public static class PublishEntityTypes
 {
     public const string Product = "product";
     public const string Variant = "variant";
+    public const string Collection = "collection";
 }
 
 public static class SalesChannelCodes

@@ -24,6 +24,8 @@ public interface IApplicationDbContext
     IQueryable<ImportItem> ImportItems { get; }
     IQueryable<SupplierScrapeRun> SupplierScrapeRuns { get; }
     IQueryable<PricingRule> PricingRules { get; }
+    IQueryable<Collection> Collections { get; }
+    IQueryable<CollectionProduct> CollectionProducts { get; }
     IQueryable<SalesChannel> SalesChannels { get; }
     IQueryable<ExternalIdMap> ExternalIdMaps { get; }
     IQueryable<PublishRun> PublishRuns { get; }
@@ -36,7 +38,11 @@ public interface IApplicationDbContext
 
 public static class CatalogMapping
 {
-    public static ProductResponse ToResponse(Product product, IObjectStorage storage, string currency) =>
+    public static ProductResponse ToResponse(
+        Product product,
+        IObjectStorage storage,
+        string currency,
+        IReadOnlyCollection<Guid>? collectionIds = null) =>
         new(
             product.Id,
             product.Name,
@@ -46,8 +52,12 @@ public static class CatalogMapping
             currency,
             product.TeamId,
             product.SeasonId,
+            product.SeoTitle,
+            product.SeoDescription,
+            product.SeoHandle,
             product.Categories.Select(x => x.CategoryId).ToArray(),
             product.Tags.Select(x => x.TagId).ToArray(),
+            collectionIds ?? [],
             product.Variants
                 .OrderBy(x => x.SortOrder)
                 .Select(v => new ProductVariantResponse(
@@ -90,7 +100,9 @@ public static class CatalogMapping
         Product product, IObjectStorage storage, IApplicationDbContext db, CancellationToken cancellationToken)
     {
         var currency = await CatalogHandlerSupport.GetCurrencyAsync(db, cancellationToken).ConfigureAwait(false);
-        return ToResponse(product, storage, currency);
+        var collectionIds = await CollectionMembership.IdsForProductAsync(db, product, cancellationToken)
+            .ConfigureAwait(false);
+        return ToResponse(product, storage, currency, collectionIds);
     }
 }
 
@@ -101,7 +113,10 @@ public sealed record CreateProductCommand(
     Guid? TeamId,
     Guid? SeasonId,
     IReadOnlyCollection<Guid>? CategoryIds,
-    IReadOnlyCollection<Guid>? TagIds) : IRequest<ProductResponse>;
+    IReadOnlyCollection<Guid>? TagIds,
+    string? SeoTitle = null,
+    string? SeoDescription = null,
+    string? SeoHandle = null) : IRequest<ProductResponse>;
 
 public sealed record UpdateProductCommand(
     Guid ProductId,
@@ -111,7 +126,10 @@ public sealed record UpdateProductCommand(
     Guid? TeamId,
     Guid? SeasonId,
     IReadOnlyCollection<Guid>? CategoryIds,
-    IReadOnlyCollection<Guid>? TagIds) : IRequest<ProductResponse?>;
+    IReadOnlyCollection<Guid>? TagIds,
+    string? SeoTitle = null,
+    string? SeoDescription = null,
+    string? SeoHandle = null) : IRequest<ProductResponse?>;
 
 public sealed record ActivateProductCommand(Guid ProductId) : IRequest<ProductResponse?>;
 public sealed record ArchiveProductCommand(Guid ProductId) : IRequest<ProductResponse?>;
@@ -175,6 +193,10 @@ public sealed class CreateProductValidator : AbstractValidator<CreateProductComm
         RuleFor(x => x.Name).NotEmpty().MaximumLength(200);
         RuleFor(x => x.Slug).NotEmpty().MaximumLength(100).Matches("^[a-z0-9]+(?:-[a-z0-9]+)*$");
         RuleFor(x => x.StyleCode).MaximumLength(64);
+        RuleFor(x => x.SeoTitle).MaximumLength(200);
+        RuleFor(x => x.SeoDescription).MaximumLength(320);
+        RuleFor(x => x.SeoHandle).MaximumLength(100).Matches("^[a-z0-9]+(?:-[a-z0-9]+)*$")
+            .When(x => !string.IsNullOrWhiteSpace(x.SeoHandle));
     }
 }
 
@@ -186,6 +208,10 @@ public sealed class UpdateProductValidator : AbstractValidator<UpdateProductComm
         RuleFor(x => x.Name).NotEmpty().MaximumLength(200);
         RuleFor(x => x.Slug).NotEmpty().MaximumLength(100).Matches("^[a-z0-9]+(?:-[a-z0-9]+)*$");
         RuleFor(x => x.StyleCode).MaximumLength(64);
+        RuleFor(x => x.SeoTitle).MaximumLength(200);
+        RuleFor(x => x.SeoDescription).MaximumLength(320);
+        RuleFor(x => x.SeoHandle).MaximumLength(100).Matches("^[a-z0-9]+(?:-[a-z0-9]+)*$")
+            .When(x => !string.IsNullOrWhiteSpace(x.SeoHandle));
     }
 }
 
@@ -243,6 +269,8 @@ public sealed class CreateProductHandler(
             product.SetTags(request.TagIds, time.GetUtcNow());
         }
 
+        product.SetSeo(request.SeoTitle, request.SeoDescription, request.SeoHandle, time.GetUtcNow());
+
         db.Add(product);
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return await CatalogMapping.ToResponseAsync(product, storage, db, cancellationToken).ConfigureAwait(false);
@@ -274,6 +302,7 @@ public sealed class UpdateProductHandler(
             time.GetUtcNow());
         product.SetCategories(request.CategoryIds ?? [], time.GetUtcNow());
         product.SetTags(request.TagIds ?? [], time.GetUtcNow());
+        product.SetSeo(request.SeoTitle, request.SeoDescription, request.SeoHandle, time.GetUtcNow());
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return await CatalogMapping.ToResponseAsync(product, storage, db, cancellationToken).ConfigureAwait(false);
     }

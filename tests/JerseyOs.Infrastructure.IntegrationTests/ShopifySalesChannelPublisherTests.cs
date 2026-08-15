@@ -48,7 +48,10 @@ public sealed class ShopifySalesChannelPublisherTests
                 "2025-26",
                 ["https://cdn.example/kit.jpg"],
                 [new PublishVariantInput(variantId, "HOME-M", "M", 3, 1299.00m, null, "ZAR", null)],
-                null),
+                null,
+                "home-kit",
+                "Home Kit SEO",
+                "Official home jersey."),
             CancellationToken.None);
 
         Assert.Equal("gid://shopify/Product/1", result.ExternalProductId);
@@ -57,6 +60,8 @@ public sealed class ShopifySalesChannelPublisherTests
         Assert.Contains("HOME-M", requestBody, StringComparison.Ordinal);
         Assert.Contains("style_code", requestBody, StringComparison.Ordinal);
         Assert.Contains("1299.00", requestBody, StringComparison.Ordinal);
+        Assert.Contains("home-kit", requestBody, StringComparison.Ordinal);
+        Assert.Contains("Home Kit SEO", requestBody, StringComparison.Ordinal);
     }
 
     [Fact]

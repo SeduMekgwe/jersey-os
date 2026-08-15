@@ -2,6 +2,7 @@
 import {
   Activity,
   CircleDollarSign,
+  FolderKanban,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -22,6 +23,7 @@ const nav = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/products', label: 'Products', icon: Package, end: false },
   { to: '/taxonomy', label: 'Taxonomy', icon: Tags, end: false },
+  { to: '/collections', label: 'Collections', icon: FolderKanban, end: false },
   { to: '/pricing', label: 'Pricing', icon: CircleDollarSign, end: false },
   { to: '/import', label: 'Import', icon: Upload, end: false },
   { to: '/publishing', label: 'Publishing', icon: Radio, end: false },
