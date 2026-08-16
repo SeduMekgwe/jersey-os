@@ -42,6 +42,14 @@ Configuration is loaded from `appsettings*.json`, environment variables, and an 
 | `Ai__OpenAI__ApiKey` | OpenAI API key; empty is valid for Fixture | Yes | When `Provider=OpenAI` |
 | `Ai__OpenAI__Model` | Chat Completions model (default `gpt-4o-mini`) | No | When `Provider=OpenAI` |
 | `Ai__OpenAI__BaseUrl` | Chat Completions base URL | No | When `Provider=OpenAI` |
+| `Notifications__Provider` | Notification channel (`Fixture` local/CI default, `Webhook`, or `Email`) | No | When using notifications |
+| `Notifications__Webhook__Url` | HTTPS endpoint that receives JSON alerts | Sometimes | When `Provider=Webhook` |
+| `Notifications__Email__SmtpHost` | SMTP host | Yes | When `Provider=Email` |
+| `Notifications__Email__SmtpPort` | SMTP port (default 587) | No | When `Provider=Email` |
+| `Notifications__Email__From` | From address | Yes | When `Provider=Email` |
+| `Notifications__Email__To` | Operator inbox | Yes | When `Provider=Email` |
+| `Notifications__Email__Username` | SMTP username | Yes | When SMTP auth required |
+| `Notifications__Email__Password` | SMTP password | Yes | When SMTP auth required |
 
 ## Rules
 

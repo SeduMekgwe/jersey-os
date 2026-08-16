@@ -821,6 +821,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/audit/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List recent append-only audit events */
+        get: operations["listAuditEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List enabled notification templates */
+        get: operations["listNotificationTemplates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List recent notification messages and deliveries */
+        get: operations["listNotificationMessages"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1323,6 +1374,52 @@ export interface components {
         };
         RejectAiGenerationRequest: {
             note?: string | null;
+        };
+        AuditEventResponse: {
+            /** Format: uuid */
+            id: string;
+            action: string;
+            entityType: string;
+            entityId: string;
+            dataJson?: string | null;
+            correlationId: string;
+            actor: string;
+            /** Format: date-time */
+            createdAtUtc: string;
+        };
+        NotificationTemplateResponse: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            kind: string;
+            subjectTemplate: string;
+            bodyTemplate: string;
+            isEnabled: boolean;
+        };
+        NotificationDeliveryResponse: {
+            /** Format: uuid */
+            id: string;
+            channel: string;
+            destination: string;
+            status: string;
+            attempt: number;
+            error?: string | null;
+            /** Format: date-time */
+            completedAtUtc?: string | null;
+        };
+        NotificationMessageResponse: {
+            /** Format: uuid */
+            id: string;
+            kind: string;
+            subject: string;
+            body: string;
+            status: string;
+            correlationId: string;
+            /** Format: date-time */
+            createdAtUtc: string;
+            /** Format: date-time */
+            completedAtUtc?: string | null;
+            deliveries: components["schemas"]["NotificationDeliveryResponse"][];
         };
     };
     responses: never;
@@ -3121,6 +3218,69 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    listAuditEvents: {
+        parameters: {
+            query?: {
+                action?: string;
+                entityType?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Audit events */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditEventResponse"][];
+                };
+            };
+        };
+    };
+    listNotificationTemplates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Templates */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationTemplateResponse"][];
+                };
+            };
+        };
+    };
+    listNotificationMessages: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Messages */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationMessageResponse"][];
+                };
             };
         };
     };

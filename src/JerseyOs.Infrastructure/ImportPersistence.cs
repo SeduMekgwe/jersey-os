@@ -134,7 +134,8 @@ public static class SupplierFeedSchedule
 public sealed class ParseImportBatchJob(
     JerseyOsDbContext db,
     IObjectStorage storage,
-    ISupplierCatalogFeedResolver feedResolver)
+    ISupplierCatalogFeedResolver feedResolver,
+    INotificationPublisher notifications)
 {
     [AutomaticRetry(Attempts = 3)]
     public async Task ExecuteAsync(Guid batchId, CancellationToken cancellationToken)
@@ -202,6 +203,18 @@ public sealed class ParseImportBatchJob(
 
             batch.MarkReadyForReview();
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await notifications.PublishAsync(
+                    batch.OrganizationId,
+                    NotificationKinds.ImportReady,
+                    new
+                    {
+                        batchId = batch.Id,
+                        fileName = batch.FileName,
+                        supplierName = batch.Supplier?.Name,
+                        itemCount = batch.Items.Count
+                    },
+                    cancellationToken)
+                .ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -338,6 +351,8 @@ public sealed class ScrapeSupplierFeedJob(
     IObjectStorage storage,
     ISupplierSiteCrawler crawler,
     IImportJobScheduler jobs,
+    INotificationPublisher notifications,
+    IAuditRecorder audit,
     TimeProvider time)
 {
     [Queue("scrape")]
@@ -400,7 +415,19 @@ public sealed class ScrapeSupplierFeedJob(
         {
             run.MarkFailed(exception.Message, time.GetUtcNow());
             supplier.RecordSyncFailed(exception.Message, time.GetUtcNow());
+            audit.Record(
+                supplier.OrganizationId,
+                AuditActions.ScrapeRunFailed,
+                nameof(SupplierScrapeRun),
+                run.Id.ToString("N"),
+                new { supplier.Code, error = exception.Message });
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await notifications.PublishAsync(
+                    supplier.OrganizationId,
+                    NotificationKinds.ScrapeFailed,
+                    new { runId = run.Id, supplierCode = supplier.Code, error = exception.Message },
+                    cancellationToken)
+                .ConfigureAwait(false);
             throw;
         }
     }

@@ -19,6 +19,9 @@ public interface IApplicationDbContext
     IQueryable<Category> Categories { get; }
     IQueryable<Tag> Tags { get; }
     IQueryable<AuditLog> AuditLogs { get; }
+    IQueryable<NotificationTemplate> NotificationTemplates { get; }
+    IQueryable<NotificationMessage> NotificationMessages { get; }
+    IQueryable<NotificationDelivery> NotificationDeliveries { get; }
     IQueryable<Supplier> Suppliers { get; }
     IQueryable<ImportBatch> ImportBatches { get; }
     IQueryable<ImportItem> ImportItems { get; }
@@ -492,7 +495,7 @@ public sealed class RemoveVariantHandler(
 
 public sealed class AdjustInventoryHandler(
     IApplicationDbContext db,
-    ICurrentRequest current,
+    IAuditRecorder audit,
     TimeProvider time) : IRequestHandler<AdjustInventoryCommand, InventoryResponse?>
 {
     public async Task<InventoryResponse?> Handle(AdjustInventoryCommand request, CancellationToken cancellationToken)
@@ -515,15 +518,12 @@ public sealed class AdjustInventoryHandler(
         }
 
         inventory.Adjust(request.DeltaOnHand, request.Reason, time.GetUtcNow());
-        db.Add(new AuditLog
-        {
-            OrganizationId = inventory.OrganizationId,
-            Action = "inventory.adjust",
-            EntityType = nameof(InventoryLevel),
-            EntityId = inventory.VariantId.ToString("N"),
-            DataJson = $"{{\"delta\":{request.DeltaOnHand},\"onHand\":{inventory.OnHand},\"reason\":{System.Text.Json.JsonSerializer.Serialize(request.Reason)}}}",
-            CorrelationId = current.CorrelationId
-        });
+        audit.Record(
+            inventory.OrganizationId,
+            AuditActions.InventoryAdjust,
+            nameof(InventoryLevel),
+            inventory.VariantId.ToString("N"),
+            new { delta = request.DeltaOnHand, onHand = inventory.OnHand, reason = request.Reason });
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return new InventoryResponse(
             inventory.VariantId,

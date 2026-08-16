@@ -77,7 +77,8 @@ public sealed class ImportIntegrationTests : IAsyncLifetime
         db.ImportBatchesSet.Add(batch);
         await db.SaveChangesAsync();
 
-        var job = new ParseImportBatchJob(db, storage, new SupplierCatalogFeedRegistry([new CsvSupplierCatalogFeed()]));
+        var job = new ParseImportBatchJob(
+            db, storage, new SupplierCatalogFeedRegistry([new CsvSupplierCatalogFeed()]), new NoOpNotificationPublisher());
         await job.ExecuteAsync(batch.Id, CancellationToken.None);
 
         var reloaded = await db.ImportBatchesSet.Include(x => x.Items).SingleAsync(x => x.Id == batch.Id);

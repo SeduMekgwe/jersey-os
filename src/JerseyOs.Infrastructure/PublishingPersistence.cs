@@ -453,6 +453,8 @@ public sealed class PublishProductJob(
     JerseyOsDbContext db,
     ISalesChannelPublisherResolver publisherResolver,
     IObjectStorage storage,
+    INotificationPublisher notifications,
+    IAuditRecorder audit,
     TimeProvider time)
 {
     [AutomaticRetry(Attempts = 5)]
@@ -520,6 +522,14 @@ public sealed class PublishProductJob(
             // Enabled in UI but credentials missing — fail this channel only; do not retry siblings.
             run.MarkFailed($"Publisher for channel '{channel.Code}' is not configured.", now);
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await NotifyPublishFailedAsync(
+                    organizationId,
+                    run,
+                    product,
+                    channel.Code,
+                    $"Publisher for channel '{channel.Code}' is not configured.",
+                    cancellationToken)
+                .ConfigureAwait(false);
             return;
         }
 
@@ -686,8 +696,41 @@ public sealed class PublishProductJob(
         {
             run.MarkFailed(exception.Message, now);
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await NotifyPublishFailedAsync(
+                    organizationId, run, product, channel.Code, exception.Message, cancellationToken)
+                .ConfigureAwait(false);
             throw;
         }
+    }
+
+    private async Task NotifyPublishFailedAsync(
+        Guid organizationId,
+        PublishRun run,
+        Product product,
+        string channelCode,
+        string error,
+        CancellationToken cancellationToken)
+    {
+        audit.Record(
+            organizationId,
+            AuditActions.PublishingRunFailed,
+            nameof(PublishRun),
+            run.Id.ToString("N"),
+            new { productId = product.Id, channelCode, error });
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await notifications.PublishAsync(
+                organizationId,
+                NotificationKinds.PublishFailed,
+                new
+                {
+                    runId = run.Id,
+                    productId = product.Id,
+                    productName = product.Name,
+                    channelCode,
+                    error
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private async Task<PublishRun> EnsureRunAsync(

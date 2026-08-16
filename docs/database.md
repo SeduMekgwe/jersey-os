@@ -123,6 +123,10 @@ Batches track parse/review lifecycle; items store proposed fields, match hints, 
 
 Tables are prefixed `ai_` and organization-filtered: `ai_prompt_templates` and `ai_generations`. Generations record kind, target, status, token usage, and estimated cost. Apply is operator-approved only.
 
+## Audit and notifications
+
+`AuditLogs` is append-only (no update/delete API). Notification tables are `notification_templates`, `notification_messages`, and `notification_deliveries`.
+
 ## Publishing model
 
 Tables are prefixed `publish_` and organization-filtered.

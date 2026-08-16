@@ -6,6 +6,8 @@ using JerseyOs.Api;
 using JerseyOs.Application;
 using JerseyOs.Infrastructure;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization.Policy;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
@@ -42,6 +44,7 @@ builder.Services.Configure<FormOptions>(options =>
     options.ValueLengthLimit = checked((int)MaxRequestBodyBytes);
 });
 builder.Services.AddControllers();
+builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, AuditAuthorizationResultHandler>();
 builder.Services.AddOpenApi();
 builder.Services
     .AddApiVersioning(options =>

@@ -65,7 +65,8 @@ public sealed class PublishingIntegrationTests : IAsyncLifetime
         db.ProductsSet.Add(product);
         await db.SaveChangesAsync();
 
-        var job = new PublishProductJob(db, FixedResolver.Null, CreateStorage(), TimeProvider.System);
+        var job = new PublishProductJob(
+            db, FixedResolver.Null, CreateStorage(), new NoOpNotificationPublisher(), new NoOpAuditRecorder(), TimeProvider.System);
         await job.ExecuteAsync(orgId, product.Id, unpublish: false, CancellationToken.None);
 
         var map = await db.ExternalIdMapsSet.IgnoreQueryFilters()
@@ -91,7 +92,8 @@ public sealed class PublishingIntegrationTests : IAsyncLifetime
         db.ProductsSet.Add(product);
         await db.SaveChangesAsync();
 
-        var job = new PublishProductJob(db, FixedResolver.Null, CreateStorage(), TimeProvider.System);
+        var job = new PublishProductJob(
+            db, FixedResolver.Null, CreateStorage(), new NoOpNotificationPublisher(), new NoOpAuditRecorder(), TimeProvider.System);
         await job.ExecuteAsync(orgId, product.Id, unpublish: false, CancellationToken.None);
 
         Assert.Empty(await db.ExternalIdMapsSet.IgnoreQueryFilters().ToListAsync());

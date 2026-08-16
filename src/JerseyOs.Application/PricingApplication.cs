@@ -108,7 +108,8 @@ public sealed class ListPricingRulesHandler(IApplicationDbContext db)
 
 public sealed class CreatePricingRuleHandler(
     IApplicationDbContext db,
-    ICurrentRequest current) : IRequestHandler<CreatePricingRuleCommand, PricingRuleResponse>
+    ICurrentRequest current,
+    IAuditRecorder audit) : IRequestHandler<CreatePricingRuleCommand, PricingRuleResponse>
 {
     public async Task<PricingRuleResponse> Handle(CreatePricingRuleCommand request, CancellationToken cancellationToken)
     {
@@ -126,6 +127,7 @@ public sealed class CreatePricingRuleHandler(
             request.SalesChannelId,
             request.IsEnabled);
         db.Add(rule);
+        audit.Record(orgId, AuditActions.PricingRuleCreated, nameof(PricingRule), rule.Id.ToString("N"), new { rule.Name, kind = request.Kind });
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return PricingMapping.ToResponse(rule);
     }
@@ -183,7 +185,7 @@ public sealed class UpdatePricingRuleHandler(IApplicationDbContext db)
     }
 }
 
-public sealed class DeletePricingRuleHandler(IApplicationDbContext db)
+public sealed class DeletePricingRuleHandler(IApplicationDbContext db, IAuditRecorder audit)
     : IRequestHandler<DeletePricingRuleCommand, bool>
 {
     public async Task<bool> Handle(DeletePricingRuleCommand request, CancellationToken cancellationToken)
@@ -195,6 +197,7 @@ public sealed class DeletePricingRuleHandler(IApplicationDbContext db)
             return false;
         }
 
+        audit.Record(rule.OrganizationId, AuditActions.PricingRuleDeleted, nameof(PricingRule), rule.Id.ToString("N"), new { rule.Name });
         db.Remove(rule);
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return true;

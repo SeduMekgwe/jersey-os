@@ -173,7 +173,8 @@ public sealed class CreateSupplierHandler(
 
 public sealed class UpdateSupplierFeedHandler(
     IApplicationDbContext db,
-    IImportJobScheduler jobs) : IRequestHandler<UpdateSupplierFeedCommand, SupplierResponse?>
+    IImportJobScheduler jobs,
+    IAuditRecorder audit) : IRequestHandler<UpdateSupplierFeedCommand, SupplierResponse?>
 {
     public async Task<SupplierResponse?> Handle(UpdateSupplierFeedCommand request, CancellationToken cancellationToken)
     {
@@ -193,6 +194,12 @@ public sealed class UpdateSupplierFeedHandler(
             request.ScrapeUsername,
             request.ScrapePassword,
             request.SyncCron);
+        audit.Record(
+            supplier.OrganizationId,
+            AuditActions.SupplierFeedUpdated,
+            nameof(Supplier),
+            supplier.Id.ToString("N"),
+            new { supplier.Code, supplier.FeedKind, supplier.FeedFormat });
         await db.SaveChangesAsync(cancellationToken);
         SupplierFeedConfiguration.RefreshSchedule(jobs, supplier);
         return ImportMapping.ToSupplierResponse(supplier);
@@ -416,7 +423,8 @@ public sealed class ApproveImportItemHandler(
     IApplicationDbContext db,
     IObjectStorage storage,
     IHttpClientFactory httpClientFactory,
-    TimeProvider time) : IRequestHandler<ApproveImportItemCommand, ImportItemResponse?>
+    TimeProvider time,
+    IAuditRecorder audit) : IRequestHandler<ApproveImportItemCommand, ImportItemResponse?>
 {
     public async Task<ImportItemResponse?> Handle(ApproveImportItemCommand request, CancellationToken cancellationToken)
     {
@@ -428,12 +436,13 @@ public sealed class ApproveImportItemHandler(
         }
 
         await ImportApply.ApproveAndApplyAsync(db, storage, httpClientFactory, time, item, request.Note, cancellationToken);
+        audit.Record(item.OrganizationId, AuditActions.ImportItemApproved, nameof(ImportItem), item.Id.ToString("N"), new { item.Sku, item.AppliedProductId });
         await db.SaveChangesAsync(cancellationToken);
         return ImportMapping.ToItem(item);
     }
 }
 
-public sealed class RejectImportItemHandler(IApplicationDbContext db)
+public sealed class RejectImportItemHandler(IApplicationDbContext db, IAuditRecorder audit)
     : IRequestHandler<RejectImportItemCommand, ImportItemResponse?>
 {
     public async Task<ImportItemResponse?> Handle(RejectImportItemCommand request, CancellationToken cancellationToken)
@@ -452,6 +461,7 @@ public sealed class RejectImportItemHandler(IApplicationDbContext db)
 
         item.Reject(request.Note);
         item.Batch.RefreshCompletion();
+        audit.Record(item.OrganizationId, AuditActions.ImportItemRejected, nameof(ImportItem), item.Id.ToString("N"), new { item.Sku, note = request.Note });
         await db.SaveChangesAsync(cancellationToken);
         return ImportMapping.ToItem(item);
     }
@@ -461,7 +471,8 @@ public sealed class BulkApproveImportItemsHandler(
     IApplicationDbContext db,
     IObjectStorage storage,
     IHttpClientFactory httpClientFactory,
-    TimeProvider time) : IRequestHandler<BulkApproveImportItemsCommand, IReadOnlyCollection<ImportItemResponse>>
+    TimeProvider time,
+    IAuditRecorder audit) : IRequestHandler<BulkApproveImportItemsCommand, IReadOnlyCollection<ImportItemResponse>>
 {
     public async Task<IReadOnlyCollection<ImportItemResponse>> Handle(
         BulkApproveImportItemsCommand request, CancellationToken cancellationToken)
@@ -472,6 +483,7 @@ public sealed class BulkApproveImportItemsHandler(
         foreach (var item in items)
         {
             await ImportApply.ApproveAndApplyAsync(db, storage, httpClientFactory, time, item, request.Note, cancellationToken);
+            audit.Record(item.OrganizationId, AuditActions.ImportItemApproved, nameof(ImportItem), item.Id.ToString("N"), new { item.Sku, item.AppliedProductId });
         }
 
         await db.SaveChangesAsync(cancellationToken);

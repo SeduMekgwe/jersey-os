@@ -3,9 +3,11 @@ using Asp.Versioning;
 using FluentValidation;
 using JerseyOs.Application;
 using JerseyOs.Contracts;
+using JerseyOs.Domain;
 using JerseyOs.Infrastructure;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization.Policy;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -57,6 +59,44 @@ public sealed class ApiExceptionHandler(IProblemDetailsService problemDetails) :
             },
             Exception = exception
         });
+    }
+}
+
+public sealed class AuditAuthorizationResultHandler : IAuthorizationMiddlewareResultHandler
+{
+    private readonly AuthorizationMiddlewareResultHandler _inner = new();
+
+    public async Task HandleAsync(
+        RequestDelegate next,
+        HttpContext context,
+        AuthorizationPolicy policy,
+        PolicyAuthorizationResult authorizeResult)
+    {
+        if (authorizeResult.Forbidden && context.User.Identity?.IsAuthenticated == true)
+        {
+            try
+            {
+                var current = context.RequestServices.GetRequiredService<ICurrentRequest>();
+                if (current.OrganizationId is { } organizationId)
+                {
+                    var recorder = context.RequestServices.GetRequiredService<IAuditRecorder>();
+                    var db = context.RequestServices.GetRequiredService<IApplicationDbContext>();
+                    recorder.Record(
+                        organizationId,
+                        AuditActions.AuthorizationDenied,
+                        "HttpRequest",
+                        context.Request.Path.Value ?? "/",
+                        new { method = context.Request.Method, path = context.Request.Path.Value });
+                    await db.SaveChangesAsync(context.RequestAborted).ConfigureAwait(false);
+                }
+            }
+            catch (Exception)
+            {
+                // Keep the 403 response even if audit persistence fails.
+            }
+        }
+
+        await _inner.HandleAsync(next, context, policy, authorizeResult).ConfigureAwait(false);
     }
 }
 

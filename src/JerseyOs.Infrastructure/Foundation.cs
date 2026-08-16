@@ -57,6 +57,8 @@ public static class Permissions
     public const string PublishingManage = "publishing.manage";
     public const string AiRead = "ai.read";
     public const string AiWrite = "ai.write";
+    public const string AuditRead = "audit.read";
+    public const string NotificationsRead = "notifications.read";
     public static readonly string[] All =
     [
         PlatformRead,
@@ -73,7 +75,9 @@ public static class Permissions
         PublishingRead,
         PublishingManage,
         AiRead,
-        AiWrite
+        AiWrite,
+        AuditRead,
+        NotificationsRead
     ];
 }
 
@@ -120,6 +124,9 @@ public sealed class JerseyOsDbContext(
     public DbSet<WebhookDelivery> WebhookDeliveriesSet => Set<WebhookDelivery>();
     public DbSet<AiPromptTemplate> AiPromptTemplatesSet => Set<AiPromptTemplate>();
     public DbSet<AiGeneration> AiGenerationsSet => Set<AiGeneration>();
+    public DbSet<NotificationTemplate> NotificationTemplatesSet => Set<NotificationTemplate>();
+    public DbSet<NotificationMessage> NotificationMessagesSet => Set<NotificationMessage>();
+    public DbSet<NotificationDelivery> NotificationDeliveriesSet => Set<NotificationDelivery>();
 
     IQueryable<Organization> IApplicationDbContext.Organizations => OrganizationsSet;
     IQueryable<RefreshTokenSession> IApplicationDbContext.RefreshTokenSessions => RefreshTokenSessionsSet;
@@ -145,6 +152,9 @@ public sealed class JerseyOsDbContext(
     IQueryable<WebhookDelivery> IApplicationDbContext.WebhookDeliveries => WebhookDeliveriesSet;
     IQueryable<AiPromptTemplate> IApplicationDbContext.AiPromptTemplates => AiPromptTemplatesSet;
     IQueryable<AiGeneration> IApplicationDbContext.AiGenerations => AiGenerationsSet;
+    IQueryable<NotificationTemplate> IApplicationDbContext.NotificationTemplates => NotificationTemplatesSet;
+    IQueryable<NotificationMessage> IApplicationDbContext.NotificationMessages => NotificationMessagesSet;
+    IQueryable<NotificationDelivery> IApplicationDbContext.NotificationDeliveries => NotificationDeliveriesSet;
 
     void IApplicationDbContext.Add<TEntity>(TEntity entity) => Set<TEntity>().Add(entity);
     void IApplicationDbContext.Remove<TEntity>(TEntity entity) => Set<TEntity>().Remove(entity);
@@ -230,6 +240,7 @@ public sealed class JerseyOsDbContext(
         builder.ConfigureImport(EffectiveOrganizationId);
         builder.ConfigurePublishing(EffectiveOrganizationId);
         builder.ConfigureAi(EffectiveOrganizationId);
+        builder.ConfigureNotifications(EffectiveOrganizationId);
 
         foreach (var entityType in builder.Model.GetEntityTypes()
                      .Where(t => typeof(IAuditableEntity).IsAssignableFrom(t.ClrType)))
@@ -584,6 +595,7 @@ public static class DependencyInjection
         services.AddObjectStorage(configuration);
         services.AddImportServices(configuration);
         services.AddAiServices(configuration);
+        services.AddNotificationServices(configuration);
         services.AddPublishingServices(configuration);
         services.AddDbContext<JerseyOsDbContext>(o => o.UseSqlServer(connectionString));
         services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<JerseyOsDbContext>());
@@ -645,7 +657,9 @@ public static class DependencyInjection
                 .AddPolicy(Permissions.PublishingRead, p => p.RequireClaim("permission", Permissions.PublishingRead))
                 .AddPolicy(Permissions.PublishingManage, p => p.RequireClaim("permission", Permissions.PublishingManage))
                 .AddPolicy(Permissions.AiRead, p => p.RequireClaim("permission", Permissions.AiRead))
-                .AddPolicy(Permissions.AiWrite, p => p.RequireClaim("permission", Permissions.AiWrite));
+                .AddPolicy(Permissions.AiWrite, p => p.RequireClaim("permission", Permissions.AiWrite))
+                .AddPolicy(Permissions.AuditRead, p => p.RequireClaim("permission", Permissions.AuditRead))
+                .AddPolicy(Permissions.NotificationsRead, p => p.RequireClaim("permission", Permissions.NotificationsRead));
         }
         return services;
     }

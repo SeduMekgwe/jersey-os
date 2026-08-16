@@ -1249,6 +1249,58 @@ paths:
                 $ref: '#/components/schemas/AiGenerationResponse'
         '404':
           description: Not found
+  /audit/events:
+    get:
+      operationId: listAuditEvents
+      tags: [Audit]
+      summary: List recent append-only audit events
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: action
+          in: query
+          schema: { type: string }
+        - name: entityType
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Audit events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AuditEventResponse'
+  /notifications/templates:
+    get:
+      operationId: listNotificationTemplates
+      tags: [Notifications]
+      summary: List enabled notification templates
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NotificationTemplateResponse'
+  /notifications/messages:
+    get:
+      operationId: listNotificationMessages
+      tags: [Notifications]
+      summary: List recent notification messages and deliveries
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NotificationMessageResponse'
 components:
   securitySchemes:
     bearerAuth:
@@ -1834,3 +1886,52 @@ components:
       type: object
       properties:
         note: { type: string, nullable: true }
+    AuditEventResponse:
+      type: object
+      required: [id, action, entityType, entityId, correlationId, actor, createdAtUtc]
+      properties:
+        id: { type: string, format: uuid }
+        action: { type: string }
+        entityType: { type: string }
+        entityId: { type: string }
+        dataJson: { type: string, nullable: true }
+        correlationId: { type: string }
+        actor: { type: string }
+        createdAtUtc: { type: string, format: date-time }
+    NotificationTemplateResponse:
+      type: object
+      required: [id, name, kind, subjectTemplate, bodyTemplate, isEnabled]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        kind: { type: string }
+        subjectTemplate: { type: string }
+        bodyTemplate: { type: string }
+        isEnabled: { type: boolean }
+    NotificationDeliveryResponse:
+      type: object
+      required: [id, channel, destination, status, attempt]
+      properties:
+        id: { type: string, format: uuid }
+        channel: { type: string }
+        destination: { type: string }
+        status: { type: string }
+        attempt: { type: integer }
+        error: { type: string, nullable: true }
+        completedAtUtc: { type: string, format: date-time, nullable: true }
+    NotificationMessageResponse:
+      type: object
+      required: [id, kind, subject, body, status, correlationId, createdAtUtc, deliveries]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string }
+        subject: { type: string }
+        body: { type: string }
+        status: { type: string }
+        correlationId: { type: string }
+        createdAtUtc: { type: string, format: date-time }
+        completedAtUtc: { type: string, format: date-time, nullable: true }
+        deliveries:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificationDeliveryResponse'

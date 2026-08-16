@@ -167,7 +167,8 @@ public sealed class GetCollectionHandler(IApplicationDbContext db)
 
 public sealed class CreateCollectionHandler(
     IApplicationDbContext db,
-    ICurrentRequest current) : IRequestHandler<CreateCollectionCommand, CollectionResponse>
+    ICurrentRequest current,
+    IAuditRecorder audit) : IRequestHandler<CreateCollectionCommand, CollectionResponse>
 {
     public async Task<CollectionResponse> Handle(CreateCollectionCommand request, CancellationToken cancellationToken)
     {
@@ -195,6 +196,7 @@ public sealed class CreateCollectionHandler(
         }
 
         db.Add(collection);
+        audit.Record(orgId, AuditActions.CollectionCreated, nameof(Collection), collection.Id.ToString("N"), new { collection.Name, collection.Slug });
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         var memberIds = await CollectionMembership.MemberIdsAsync(db, collection, cancellationToken)
             .ConfigureAwait(false);
@@ -269,7 +271,7 @@ public sealed class UpdateCollectionHandler(IApplicationDbContext db)
     }
 }
 
-public sealed class DeleteCollectionHandler(IApplicationDbContext db)
+public sealed class DeleteCollectionHandler(IApplicationDbContext db, IAuditRecorder audit)
     : IRequestHandler<DeleteCollectionCommand, bool>
 {
     public async Task<bool> Handle(DeleteCollectionCommand request, CancellationToken cancellationToken)
@@ -282,6 +284,7 @@ public sealed class DeleteCollectionHandler(IApplicationDbContext db)
             return false;
         }
 
+        audit.Record(collection.OrganizationId, AuditActions.CollectionDeleted, nameof(Collection), collection.Id.ToString("N"), new { collection.Name });
         db.Remove(collection);
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return true;

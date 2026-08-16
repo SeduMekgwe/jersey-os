@@ -32,6 +32,9 @@ export type WebhookDeliveryDto = components['schemas']['WebhookDeliveryResponse'
 export type AiPromptTemplateDto = components['schemas']['AiPromptTemplateResponse'];
 export type AiGenerationDto = components['schemas']['AiGenerationResponse'];
 export type CreateAiGenerationDto = components['schemas']['CreateAiGenerationRequest'];
+export type AuditEventDto = components['schemas']['AuditEventResponse'];
+export type NotificationMessageDto = components['schemas']['NotificationMessageResponse'];
+export type NotificationTemplateDto = components['schemas']['NotificationTemplateResponse'];
 
 export interface SessionDto {
   accessToken: components['schemas']['AuthResponse']['accessToken'];

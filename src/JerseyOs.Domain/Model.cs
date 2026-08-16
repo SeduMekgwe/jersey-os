@@ -110,12 +110,55 @@ public sealed class RefreshTokenSession : AuditableEntity, IOrganizationScoped
 
 public sealed class AuditLog : AuditableEntity, IOrganizationScoped
 {
-    public Guid OrganizationId { get; set; }
-    public string Action { get; set; } = string.Empty;
-    public string EntityType { get; set; } = string.Empty;
-    public string EntityId { get; set; } = string.Empty;
-    public string? DataJson { get; set; }
-    public string CorrelationId { get; set; } = string.Empty;
+    private AuditLog() { }
+
+    public AuditLog(
+        Guid organizationId,
+        string action,
+        string entityType,
+        string entityId,
+        string? dataJson,
+        string correlationId)
+    {
+        OrganizationId = organizationId;
+        Action = RequireToken(action, 128, "Action");
+        EntityType = RequireToken(entityType, 128, "Entity type");
+        EntityId = Truncate(entityId, 256);
+        DataJson = string.IsNullOrWhiteSpace(dataJson) ? null : dataJson.Trim();
+        CorrelationId = string.IsNullOrWhiteSpace(correlationId)
+            ? Guid.NewGuid().ToString("N")
+            : correlationId.Trim();
+        if (CorrelationId.Length > 64)
+        {
+            CorrelationId = CorrelationId[..64];
+        }
+    }
+
+    public Guid OrganizationId { get; private set; }
+    public string Action { get; private set; } = string.Empty;
+    public string EntityType { get; private set; } = string.Empty;
+    public string EntityId { get; private set; } = string.Empty;
+    public string? DataJson { get; private set; }
+    public string CorrelationId { get; private set; } = string.Empty;
+
+    private static string RequireToken(string value, int maxLength, string name)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(value);
+        var trimmed = value.Trim();
+        if (trimmed.Length > maxLength)
+        {
+            throw new InvalidOperationException($"{name} cannot exceed {maxLength} characters.");
+        }
+
+        return trimmed;
+    }
+
+    private static string Truncate(string value, int maxLength)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(value);
+        var trimmed = value.Trim();
+        return trimmed.Length <= maxLength ? trimmed : trimmed[..maxLength];
+    }
 }
 
 public sealed class OutboxMessage : AuditableEntity, IOrganizationScoped

@@ -130,6 +130,23 @@ public static class Bootstrapper
             }
         }
 
+        foreach (var spec in NotificationTemplate.Defaults)
+        {
+            if (!await db.NotificationTemplatesSet.IgnoreQueryFilters()
+                    .AnyAsync(
+                        x => x.OrganizationId == organizationId && x.Kind == spec.Kind,
+                        cancellationToken))
+            {
+                db.NotificationTemplatesSet.Add(
+                    new NotificationTemplate(
+                        organizationId,
+                        spec.Kind,
+                        spec.Name,
+                        spec.Subject,
+                        spec.Body));
+            }
+        }
+
         await db.SaveChangesAsync(cancellationToken);
     }
 }

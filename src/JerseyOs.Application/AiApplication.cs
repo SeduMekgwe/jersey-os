@@ -171,7 +171,8 @@ public sealed class EnqueueAiGenerationHandler(
 
 public sealed class ApproveAiGenerationHandler(
     IApplicationDbContext db,
-    TimeProvider time) : IRequestHandler<ApproveAiGenerationCommand, AiGenerationResponse?>
+    TimeProvider time,
+    IAuditRecorder audit) : IRequestHandler<ApproveAiGenerationCommand, AiGenerationResponse?>
 {
     public async Task<AiGenerationResponse?> Handle(
         ApproveAiGenerationCommand request, CancellationToken cancellationToken)
@@ -188,6 +189,12 @@ public sealed class ApproveAiGenerationHandler(
         await AiContentApplier.ApplyAsync(db, generation, time.GetUtcNow(), cancellationToken)
             .ConfigureAwait(false);
         generation.MarkApplied(time.GetUtcNow());
+        audit.Record(
+            generation.OrganizationId,
+            AuditActions.AiGenerationApproved,
+            nameof(AiGeneration),
+            generation.Id.ToString("N"),
+            new { generation.Kind, generation.TargetType, generation.TargetId });
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return AiMapping.ToGeneration(generation);
     }

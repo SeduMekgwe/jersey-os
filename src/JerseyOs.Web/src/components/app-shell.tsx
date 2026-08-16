@@ -1,6 +1,7 @@
 ﻿import * as Dialog from '@radix-ui/react-dialog';
 import {
   Activity,
+  Bell,
   CircleDollarSign,
   FolderKanban,
   LayoutDashboard,
@@ -8,6 +9,7 @@ import {
   Menu,
   Package,
   Radio,
+  ScrollText,
   ShieldCheck,
   Tags,
   Upload,
@@ -27,6 +29,8 @@ const nav = [
   { to: '/pricing', label: 'Pricing', icon: CircleDollarSign, end: false },
   { to: '/import', label: 'Import', icon: Upload, end: false },
   { to: '/publishing', label: 'Publishing', icon: Radio, end: false },
+  { to: '/audit', label: 'Audit', icon: ScrollText, end: false },
+  { to: '/notifications', label: 'Notifications', icon: Bell, end: false },
   { to: '/system-health', label: 'System health', icon: Activity, end: false },
 ];
 function Navigation({ onNavigate }: { onNavigate?: () => void }) {
