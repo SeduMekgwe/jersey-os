@@ -4,6 +4,7 @@ import {
   Bell,
   CircleDollarSign,
   FolderKanban,
+  KeyRound,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -19,6 +20,7 @@ import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '@/auth/auth-context';
 import { Button } from '@/components/ui';
+import { OpsStatusListener } from '@/lib/ops-status';
 import { cn } from '@/lib/cn';
 
 const nav = [
@@ -31,6 +33,7 @@ const nav = [
   { to: '/publishing', label: 'Publishing', icon: Radio, end: false },
   { to: '/audit', label: 'Audit', icon: ScrollText, end: false },
   { to: '/notifications', label: 'Notifications', icon: Bell, end: false },
+  { to: '/integrations', label: 'API keys', icon: KeyRound, end: false },
   { to: '/system-health', label: 'System health', icon: Activity, end: false },
 ];
 function Navigation({ onNavigate }: { onNavigate?: () => void }) {
@@ -139,6 +142,7 @@ export function AppShell() {
           tabIndex={-1}
           className="min-h-screen px-4 pb-10 pt-24 lg:pl-72 lg:pr-8"
         >
+          <OpsStatusListener />
           <Outlet />
         </main>
       </div>

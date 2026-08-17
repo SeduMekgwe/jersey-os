@@ -44,6 +44,8 @@ builder.Services.Configure<FormOptions>(options =>
     options.ValueLengthLimit = checked((int)MaxRequestBodyBytes);
 });
 builder.Services.AddControllers();
+builder.Services.AddSignalR();
+builder.Services.AddHostedService<RedisOpsStatusRelay>();
 builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, AuditAuthorizationResultHandler>();
 builder.Services.AddOpenApi();
 builder.Services
@@ -123,6 +125,7 @@ app.Use(async (context, next) =>
 app.MapOpenApi();
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") });
+app.MapHub<OpsStatusHub>(OpsStatusHub.Path);
 app.MapControllers();
 
 if (!app.Environment.IsEnvironment("Testing"))

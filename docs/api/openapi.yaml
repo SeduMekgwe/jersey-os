@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: Jersey OS API
   version: 1.0.0
-  description: Platform, catalog, supplier import, AI content, and publishing HTTP contract for Jersey OS.
+  description: Platform, catalog, supplier import, AI content, publishing, integrations, and operations HTTP contract for Jersey OS.
 servers:
   - url: /api/v1
 paths:
@@ -1301,12 +1301,70 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/NotificationMessageResponse'
+  /integrations/api-keys:
+    get:
+      operationId: listApiKeys
+      tags: [Integrations]
+      summary: List machine API keys (hashes only; plaintext is never stored)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: API keys
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApiKeyResponse'
+    post:
+      operationId: createApiKey
+      tags: [Integrations]
+      summary: Create a machine API key; plaintext is returned once
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateApiKeyRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatedApiKeyResponse'
+  /integrations/api-keys/{apiKeyId}/revoke:
+    post:
+      operationId: revokeApiKey
+      tags: [Integrations]
+      summary: Revoke a machine API key
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: apiKeyId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Revoked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyResponse'
+        '404':
+          description: Not found
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+      description: "Machine key jos_{prefix}_{secret}. Also accepted as Authorization Bearer jos_..."
   parameters:
     ProductId:
       in: path
@@ -1935,3 +1993,36 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/NotificationDeliveryResponse'
+    CreateApiKeyRequest:
+      type: object
+      required: [name, scopes]
+      properties:
+        name: { type: string }
+        scopes:
+          type: array
+          items: { type: string }
+    ApiKeyResponse:
+      type: object
+      required: [id, name, prefix, scopes, createdAtUtc]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        prefix: { type: string }
+        scopes:
+          type: array
+          items: { type: string }
+        createdAtUtc: { type: string, format: date-time }
+        lastUsedAtUtc: { type: string, format: date-time, nullable: true }
+        revokedAtUtc: { type: string, format: date-time, nullable: true }
+    CreatedApiKeyResponse:
+      type: object
+      required: [id, name, prefix, scopes, plaintext, createdAtUtc]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        prefix: { type: string }
+        scopes:
+          type: array
+          items: { type: string }
+        plaintext: { type: string }
+        createdAtUtc: { type: string, format: date-time }

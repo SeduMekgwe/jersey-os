@@ -125,7 +125,7 @@ Tables are prefixed `ai_` and organization-filtered: `ai_prompt_templates` and `
 
 ## Audit and notifications
 
-`AuditLogs` is append-only (no update/delete API). Notification tables are `notification_templates`, `notification_messages`, and `notification_deliveries`.
+`AuditLogs` is append-only (no update/delete API). Notification tables are `notification_templates`, `notification_messages`, and `notification_deliveries`. Machine API keys are `integration_api_keys` (SHA-256 of plaintext; prefix for display; scopes as a comma-separated permission list).
 
 ## Publishing model
 

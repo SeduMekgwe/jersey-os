@@ -21,7 +21,10 @@ public sealed class HttpCurrentRequest(IHttpContextAccessor accessor) : ICurrent
     private ClaimsPrincipal? User => accessor.HttpContext?.User;
     public Guid? UserId => Guid.TryParse(User?.FindFirstValue("sub"), out var value) ? value : null;
     public Guid? OrganizationId => Guid.TryParse(User?.FindFirstValue("org"), out var value) ? value : null;
-    public string Actor => UserId?.ToString() ?? "system";
+    public string Actor =>
+        User?.FindFirstValue("api_key_prefix") is { Length: > 0 } prefix
+            ? $"apikey:{prefix}"
+            : UserId?.ToString() ?? "system";
     public string CorrelationId => accessor.HttpContext?.TraceIdentifier ?? Guid.NewGuid().ToString("N");
 }
 

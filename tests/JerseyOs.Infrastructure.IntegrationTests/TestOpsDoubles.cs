@@ -9,6 +9,12 @@ internal sealed class NoOpAuditRecorder : IAuditRecorder
     }
 }
 
+internal sealed class NoOpOpsStatusPublisher : IOpsStatusPublisher
+{
+    public Task PublishAsync(OpsStatusEvent status, CancellationToken cancellationToken) =>
+        Task.CompletedTask;
+}
+
 internal sealed class NoOpNotificationPublisher : INotificationPublisher
 {
     public Task PublishAsync(Guid organizationId, string kind, object payload, CancellationToken cancellationToken) =>

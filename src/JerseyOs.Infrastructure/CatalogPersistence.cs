@@ -230,19 +230,20 @@ public static class CatalogModelBuilder
     public static IServiceCollection AddObjectStorage(this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<ObjectStorageOptions>(configuration.GetSection(ObjectStorageOptions.Section));
-        var provider = configuration.GetSection(ObjectStorageOptions.Section)["Provider"] ?? "Local";
+        var bound = configuration.GetSection(ObjectStorageOptions.Section).Get<ObjectStorageOptions>()
+            ?? new ObjectStorageOptions();
+        ObjectStorageRegistration.ValidatePublicBaseUrl(bound.PublicBaseUrl, "ObjectStorage:PublicBaseUrl");
+        var provider = bound.Provider ?? "Local";
 
         if (ObjectStorageRegistration.IsAzureBlobProvider(provider))
         {
-            var bound = configuration.GetSection(ObjectStorageOptions.Section).Get<ObjectStorageOptions>()
-                ?? new ObjectStorageOptions();
             ObjectStorageRegistration.ValidateAzureBlobOptions(bound);
 
             services.AddSingleton<IAzureBlobGateway>(sp =>
             {
                 var opts = sp.GetRequiredService<IOptions<ObjectStorageOptions>>().Value;
                 ObjectStorageRegistration.ValidateAzureBlobOptions(opts);
-                var serviceClient = new Azure.Storage.Blobs.BlobServiceClient(opts.AzureBlob.ConnectionString);
+                var serviceClient = CreateBlobServiceClient(opts.AzureBlob);
                 var container = serviceClient.GetBlobContainerClient(opts.AzureBlob.ContainerName);
                 container.CreateIfNotExists();
                 return new AzureBlobContainerGateway(container);
@@ -255,5 +256,17 @@ public static class CatalogModelBuilder
         }
 
         return services;
+    }
+
+    private static Azure.Storage.Blobs.BlobServiceClient CreateBlobServiceClient(AzureBlobObjectStorageOptions azure)
+    {
+        if (ObjectStorageRegistration.IsManagedIdentity(azure.AuthMode))
+        {
+            return new Azure.Storage.Blobs.BlobServiceClient(
+                new Uri(azure.ServiceUri!.Trim(), UriKind.Absolute),
+                new Azure.Identity.DefaultAzureCredential());
+        }
+
+        return new Azure.Storage.Blobs.BlobServiceClient(azure.ConnectionString);
     }
 }

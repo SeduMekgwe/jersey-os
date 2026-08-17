@@ -455,6 +455,7 @@ public sealed class PublishProductJob(
     IObjectStorage storage,
     INotificationPublisher notifications,
     IAuditRecorder audit,
+    IOpsStatusPublisher ops,
     TimeProvider time)
 {
     [AutomaticRetry(Attempts = 5)]
@@ -522,6 +523,7 @@ public sealed class PublishProductJob(
             // Enabled in UI but credentials missing — fail this channel only; do not retry siblings.
             run.MarkFailed($"Publisher for channel '{channel.Code}' is not configured.", now);
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await PublishRunStatusAsync(organizationId, run, cancellationToken).ConfigureAwait(false);
             await NotifyPublishFailedAsync(
                     organizationId,
                     run,
@@ -549,6 +551,7 @@ public sealed class PublishProductJob(
 
                 run.MarkSucceeded(now);
                 await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                await PublishRunStatusAsync(organizationId, run, cancellationToken).ConfigureAwait(false);
                 return;
             }
 
@@ -691,17 +694,30 @@ public sealed class PublishProductJob(
 
             run.MarkSucceeded(now);
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await PublishRunStatusAsync(organizationId, run, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception exception)
         {
             run.MarkFailed(exception.Message, now);
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await PublishRunStatusAsync(organizationId, run, cancellationToken).ConfigureAwait(false);
             await NotifyPublishFailedAsync(
                     organizationId, run, product, channel.Code, exception.Message, cancellationToken)
                 .ConfigureAwait(false);
             throw;
         }
     }
+
+    private Task PublishRunStatusAsync(
+        Guid organizationId, PublishRun run, CancellationToken cancellationToken) =>
+        ops.PublishAsync(
+            new OpsStatusEvent(
+                organizationId,
+                OpsStatusKinds.PublishingRun,
+                run.Id.ToString("N"),
+                run.Status.ToString(),
+                DateTimeOffset.UtcNow),
+            cancellationToken);
 
     private async Task NotifyPublishFailedAsync(
         Guid organizationId,

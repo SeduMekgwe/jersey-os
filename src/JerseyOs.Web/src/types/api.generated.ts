@@ -872,6 +872,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/integrations/api-keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List machine API keys (hashes only; plaintext is never stored) */
+        get: operations["listApiKeys"];
+        put?: never;
+        /** Create a machine API key; plaintext is returned once */
+        post: operations["createApiKey"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/integrations/api-keys/{apiKeyId}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revoke a machine API key */
+        post: operations["revokeApiKey"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1420,6 +1455,33 @@ export interface components {
             /** Format: date-time */
             completedAtUtc?: string | null;
             deliveries: components["schemas"]["NotificationDeliveryResponse"][];
+        };
+        CreateApiKeyRequest: {
+            name: string;
+            scopes: string[];
+        };
+        ApiKeyResponse: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            prefix: string;
+            scopes: string[];
+            /** Format: date-time */
+            createdAtUtc: string;
+            /** Format: date-time */
+            lastUsedAtUtc?: string | null;
+            /** Format: date-time */
+            revokedAtUtc?: string | null;
+        };
+        CreatedApiKeyResponse: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            prefix: string;
+            scopes: string[];
+            plaintext: string;
+            /** Format: date-time */
+            createdAtUtc: string;
         };
     };
     responses: never;
@@ -3281,6 +3343,79 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["NotificationMessageResponse"][];
                 };
+            };
+        };
+    };
+    listApiKeys: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description API keys */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiKeyResponse"][];
+                };
+            };
+        };
+    };
+    createApiKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateApiKeyRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedApiKeyResponse"];
+                };
+            };
+        };
+    };
+    revokeApiKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                apiKeyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiKeyResponse"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

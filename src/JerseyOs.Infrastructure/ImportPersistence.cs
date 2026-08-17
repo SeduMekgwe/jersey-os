@@ -135,7 +135,8 @@ public sealed class ParseImportBatchJob(
     JerseyOsDbContext db,
     IObjectStorage storage,
     ISupplierCatalogFeedResolver feedResolver,
-    INotificationPublisher notifications)
+    INotificationPublisher notifications,
+    IOpsStatusPublisher ops)
 {
     [AutomaticRetry(Attempts = 3)]
     public async Task ExecuteAsync(Guid batchId, CancellationToken cancellationToken)
@@ -203,6 +204,15 @@ public sealed class ParseImportBatchJob(
 
             batch.MarkReadyForReview();
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await ops.PublishAsync(
+                    new OpsStatusEvent(
+                        batch.OrganizationId,
+                        OpsStatusKinds.ImportBatch,
+                        batch.Id.ToString("N"),
+                        batch.Status.ToString(),
+                        DateTimeOffset.UtcNow),
+                    cancellationToken)
+                .ConfigureAwait(false);
             await notifications.PublishAsync(
                     batch.OrganizationId,
                     NotificationKinds.ImportReady,
@@ -220,6 +230,15 @@ public sealed class ParseImportBatchJob(
         {
             batch.MarkFailed(ex.Message);
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await ops.PublishAsync(
+                    new OpsStatusEvent(
+                        batch.OrganizationId,
+                        OpsStatusKinds.ImportBatch,
+                        batch.Id.ToString("N"),
+                        batch.Status.ToString(),
+                        DateTimeOffset.UtcNow),
+                    cancellationToken)
+                .ConfigureAwait(false);
             throw;
         }
     }
@@ -353,6 +372,7 @@ public sealed class ScrapeSupplierFeedJob(
     IImportJobScheduler jobs,
     INotificationPublisher notifications,
     IAuditRecorder audit,
+    IOpsStatusPublisher ops,
     TimeProvider time)
 {
     [Queue("scrape")]
@@ -409,6 +429,15 @@ public sealed class ScrapeSupplierFeedJob(
             run.MarkSucceeded(result.ProductCount, batch.Id, time.GetUtcNow());
             supplier.RecordSyncSucceeded(time.GetUtcNow());
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await ops.PublishAsync(
+                    new OpsStatusEvent(
+                        supplier.OrganizationId,
+                        OpsStatusKinds.ImportScrape,
+                        run.Id.ToString("N"),
+                        run.Status.ToString(),
+                        DateTimeOffset.UtcNow),
+                    cancellationToken)
+                .ConfigureAwait(false);
             jobs.EnqueueParse(batch.Id);
         }
         catch (Exception exception)
@@ -422,6 +451,15 @@ public sealed class ScrapeSupplierFeedJob(
                 run.Id.ToString("N"),
                 new { supplier.Code, error = exception.Message });
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await ops.PublishAsync(
+                    new OpsStatusEvent(
+                        supplier.OrganizationId,
+                        OpsStatusKinds.ImportScrape,
+                        run.Id.ToString("N"),
+                        run.Status.ToString(),
+                        DateTimeOffset.UtcNow),
+                    cancellationToken)
+                .ConfigureAwait(false);
             await notifications.PublishAsync(
                     supplier.OrganizationId,
                     NotificationKinds.ScrapeFailed,

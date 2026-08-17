@@ -7,7 +7,11 @@ namespace JerseyOs.Infrastructure;
 
 public sealed class AzureBlobObjectStorageOptions
 {
+    /// <summary>ConnectionString (default) or ManagedIdentity.</summary>
+    public string AuthMode { get; set; } = "ConnectionString";
     public string ConnectionString { get; set; } = string.Empty;
+    /// <summary>Blob service URI when AuthMode=ManagedIdentity (e.g. https://account.blob.core.windows.net).</summary>
+    public string? ServiceUri { get; set; }
     public string ContainerName { get; set; } = string.Empty;
     public string? PublicBaseUrl { get; set; }
 }
@@ -131,18 +135,51 @@ public sealed class AzureBlobObjectStorage(
 
 public static class ObjectStorageRegistration
 {
+    public static void ValidatePublicBaseUrl(string? value, string settingName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return;
+        }
+
+        if (!Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
+        {
+            throw new InvalidOperationException($"{settingName} must be an absolute http(s) URL.");
+        }
+    }
+
+    public static bool IsManagedIdentity(string? authMode) =>
+        string.Equals(authMode, "ManagedIdentity", StringComparison.OrdinalIgnoreCase);
+
     public static void ValidateAzureBlobOptions(ObjectStorageOptions options)
     {
-        if (string.IsNullOrWhiteSpace(options.AzureBlob.ConnectionString))
-        {
-            throw new InvalidOperationException(
-                "ObjectStorage:AzureBlob:ConnectionString is required when Provider is AzureBlob.");
-        }
+        ValidatePublicBaseUrl(options.PublicBaseUrl, "ObjectStorage:PublicBaseUrl");
+        ValidatePublicBaseUrl(options.AzureBlob.PublicBaseUrl, "ObjectStorage:AzureBlob:PublicBaseUrl");
 
         if (string.IsNullOrWhiteSpace(options.AzureBlob.ContainerName))
         {
             throw new InvalidOperationException(
                 "ObjectStorage:AzureBlob:ContainerName is required when Provider is AzureBlob.");
+        }
+
+        if (IsManagedIdentity(options.AzureBlob.AuthMode))
+        {
+            if (string.IsNullOrWhiteSpace(options.AzureBlob.ServiceUri)
+                || !Uri.TryCreate(options.AzureBlob.ServiceUri.Trim(), UriKind.Absolute, out var serviceUri)
+                || serviceUri.Scheme != Uri.UriSchemeHttps)
+            {
+                throw new InvalidOperationException(
+                    "ObjectStorage:AzureBlob:ServiceUri must be an absolute https URI when AuthMode is ManagedIdentity.");
+            }
+
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(options.AzureBlob.ConnectionString))
+        {
+            throw new InvalidOperationException(
+                "ObjectStorage:AzureBlob:ConnectionString is required when Provider is AzureBlob and AuthMode is ConnectionString.");
         }
     }
 

@@ -17,6 +17,7 @@ export function PublishingPage() {
   const runsQuery = useQuery({
     queryKey: ['publishing', 'runs'],
     queryFn: () => apiRequest<PublishRunDto[]>('/publishing/runs'),
+    refetchInterval: 10_000,
   });
   const deliveriesQuery = useQuery({
     queryKey: ['publishing', 'webhook-deliveries'],

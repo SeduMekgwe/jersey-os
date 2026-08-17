@@ -10,6 +10,7 @@ using JerseyOs.Contracts;
 using JerseyOs.Domain;
 using JerseyOs.SharedKernel;
 using MediatR;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
@@ -59,6 +60,7 @@ public static class Permissions
     public const string AiWrite = "ai.write";
     public const string AuditRead = "audit.read";
     public const string NotificationsRead = "notifications.read";
+    public const string IntegrationsManage = "integrations.manage";
     public static readonly string[] All =
     [
         PlatformRead,
@@ -77,7 +79,8 @@ public static class Permissions
         AiRead,
         AiWrite,
         AuditRead,
-        NotificationsRead
+        NotificationsRead,
+        IntegrationsManage
     ];
 }
 
@@ -127,6 +130,7 @@ public sealed class JerseyOsDbContext(
     public DbSet<NotificationTemplate> NotificationTemplatesSet => Set<NotificationTemplate>();
     public DbSet<NotificationMessage> NotificationMessagesSet => Set<NotificationMessage>();
     public DbSet<NotificationDelivery> NotificationDeliveriesSet => Set<NotificationDelivery>();
+    public DbSet<ApiKeyCredential> ApiKeysSet => Set<ApiKeyCredential>();
 
     IQueryable<Organization> IApplicationDbContext.Organizations => OrganizationsSet;
     IQueryable<RefreshTokenSession> IApplicationDbContext.RefreshTokenSessions => RefreshTokenSessionsSet;
@@ -155,6 +159,7 @@ public sealed class JerseyOsDbContext(
     IQueryable<NotificationTemplate> IApplicationDbContext.NotificationTemplates => NotificationTemplatesSet;
     IQueryable<NotificationMessage> IApplicationDbContext.NotificationMessages => NotificationMessagesSet;
     IQueryable<NotificationDelivery> IApplicationDbContext.NotificationDeliveries => NotificationDeliveriesSet;
+    IQueryable<ApiKeyCredential> IApplicationDbContext.ApiKeys => ApiKeysSet;
 
     void IApplicationDbContext.Add<TEntity>(TEntity entity) => Set<TEntity>().Add(entity);
     void IApplicationDbContext.Remove<TEntity>(TEntity entity) => Set<TEntity>().Remove(entity);
@@ -241,6 +246,7 @@ public sealed class JerseyOsDbContext(
         builder.ConfigurePublishing(EffectiveOrganizationId);
         builder.ConfigureAi(EffectiveOrganizationId);
         builder.ConfigureNotifications(EffectiveOrganizationId);
+        builder.ConfigureIntegrations(EffectiveOrganizationId);
 
         foreach (var entityType in builder.Model.GetEntityTypes()
                      .Where(t => typeof(IAuditableEntity).IsAssignableFrom(t.ClrType)))
@@ -612,6 +618,7 @@ public static class DependencyInjection
         services.AddScoped<OutboxPump>();
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisConnection));
+        services.AddSingleton<IOpsStatusPublisher, RedisOpsStatusPublisher>();
         services.AddHealthChecks()
             .AddDbContextCheck<JerseyOsDbContext>("sql", tags: ["ready"])
             .AddCheck<RedisHealthCheck>("redis", tags: ["ready"]);
@@ -626,22 +633,50 @@ public static class DependencyInjection
         {
             if (Encoding.UTF8.GetByteCount(jwt.SigningKey) < 32)
                 throw new InvalidOperationException("JWT signing key must be at least 32 bytes.");
-            services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o =>
-            {
-                o.MapInboundClaims = false;
-                o.TokenValidationParameters = new TokenValidationParameters
+            services.AddAuthentication(o =>
                 {
-                    ValidateIssuer = true,
-                    ValidIssuer = jwt.Issuer,
-                    ValidateAudience = true,
-                    ValidAudience = jwt.Audience,
-                    ValidateIssuerSigningKey = true,
-                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.SigningKey)),
-                    ValidateLifetime = true,
-                    ClockSkew = TimeSpan.FromSeconds(30),
-                    NameClaimType = JwtRegisteredClaimNames.Sub
-                };
-            });
+                    o.DefaultAuthenticateScheme = "Smart";
+                    o.DefaultChallengeScheme = "Smart";
+                })
+                .AddPolicyScheme("Smart", "JWT or API key", o =>
+                {
+                    o.ForwardDefaultSelector = context =>
+                        ApiKeyAuthenticationHandler.HasPresentedKey(context.Request)
+                            ? ApiKeyAuthenticationHandler.SchemeName
+                            : JwtBearerDefaults.AuthenticationScheme;
+                })
+                .AddJwtBearer(o =>
+                {
+                    o.MapInboundClaims = false;
+                    o.TokenValidationParameters = new TokenValidationParameters
+                    {
+                        ValidateIssuer = true,
+                        ValidIssuer = jwt.Issuer,
+                        ValidateAudience = true,
+                        ValidAudience = jwt.Audience,
+                        ValidateIssuerSigningKey = true,
+                        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.SigningKey)),
+                        ValidateLifetime = true,
+                        ClockSkew = TimeSpan.FromSeconds(30),
+                        NameClaimType = JwtRegisteredClaimNames.Sub
+                    };
+                    o.Events = new JwtBearerEvents
+                    {
+                        OnMessageReceived = context =>
+                        {
+                            var accessToken = context.Request.Query["access_token"];
+                            var path = context.HttpContext.Request.Path;
+                            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+                            {
+                                context.Token = accessToken;
+                            }
+
+                            return Task.CompletedTask;
+                        }
+                    };
+                })
+                .AddScheme<AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>(
+                    ApiKeyAuthenticationHandler.SchemeName, _ => { });
             services.AddAuthorizationBuilder()
                 .AddPolicy(Permissions.PlatformRead, p => p.RequireClaim("permission", Permissions.PlatformRead))
                 .AddPolicy(Permissions.PlatformAdmin, p => p.RequireClaim("permission", Permissions.PlatformAdmin))
@@ -659,7 +694,8 @@ public static class DependencyInjection
                 .AddPolicy(Permissions.AiRead, p => p.RequireClaim("permission", Permissions.AiRead))
                 .AddPolicy(Permissions.AiWrite, p => p.RequireClaim("permission", Permissions.AiWrite))
                 .AddPolicy(Permissions.AuditRead, p => p.RequireClaim("permission", Permissions.AuditRead))
-                .AddPolicy(Permissions.NotificationsRead, p => p.RequireClaim("permission", Permissions.NotificationsRead));
+                .AddPolicy(Permissions.NotificationsRead, p => p.RequireClaim("permission", Permissions.NotificationsRead))
+                .AddPolicy(Permissions.IntegrationsManage, p => p.RequireClaim("permission", Permissions.IntegrationsManage));
         }
         return services;
     }

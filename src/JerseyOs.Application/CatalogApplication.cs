@@ -22,6 +22,7 @@ public interface IApplicationDbContext
     IQueryable<NotificationTemplate> NotificationTemplates { get; }
     IQueryable<NotificationMessage> NotificationMessages { get; }
     IQueryable<NotificationDelivery> NotificationDeliveries { get; }
+    IQueryable<ApiKeyCredential> ApiKeys { get; }
     IQueryable<Supplier> Suppliers { get; }
     IQueryable<ImportBatch> ImportBatches { get; }
     IQueryable<ImportItem> ImportItems { get; }

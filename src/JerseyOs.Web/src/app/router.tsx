@@ -6,6 +6,7 @@ import { CollectionsPage } from '@/pages/collections';
 import { DashboardPage } from '@/pages/dashboard';
 import { ImportBatchDetailPage } from '@/pages/import-batch-detail';
 import { ImportBatchesPage } from '@/pages/import-batches';
+import { IntegrationsPage } from '@/pages/integrations';
 import { LoginPage } from '@/pages/login';
 import { NotificationsPage } from '@/pages/notifications';
 import { ProductDetailPage } from '@/pages/product-detail';
@@ -61,6 +62,10 @@ export const router = createBrowserRouter([
           {
             element: <RequirePermission permission="notifications.read" />,
             children: [{ path: 'notifications', element: <NotificationsPage /> }],
+          },
+          {
+            element: <RequirePermission permission="integrations.manage" />,
+            children: [{ path: 'integrations', element: <IntegrationsPage /> }],
           },
         ],
       },

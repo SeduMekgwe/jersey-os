@@ -153,6 +153,57 @@ public sealed class ObjectStorageTests
     }
 
     [Fact]
+    public void AddObjectStorage_AzureBlob_ManagedIdentity_WithoutServiceUri_Throws()
+    {
+        var services = new ServiceCollection();
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ObjectStorage:Provider"] = "AzureBlob",
+                ["ObjectStorage:AzureBlob:AuthMode"] = "ManagedIdentity",
+                ["ObjectStorage:AzureBlob:ContainerName"] = "media"
+            })
+            .Build();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => services.AddObjectStorage(config));
+        Assert.Contains("ServiceUri", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AddObjectStorage_AzureBlob_ManagedIdentity_WithServiceUri_Registers()
+    {
+        var services = new ServiceCollection();
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ObjectStorage:Provider"] = "AzureBlob",
+                ["ObjectStorage:AzureBlob:AuthMode"] = "ManagedIdentity",
+                ["ObjectStorage:AzureBlob:ServiceUri"] = "https://acct.blob.core.windows.net",
+                ["ObjectStorage:AzureBlob:ContainerName"] = "media"
+            })
+            .Build();
+
+        services.AddObjectStorage(config);
+        Assert.Contains(services, d => d.ServiceType == typeof(IObjectStorage));
+    }
+
+    [Fact]
+    public void AddObjectStorage_InvalidPublicBaseUrl_Throws()
+    {
+        var services = new ServiceCollection();
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ObjectStorage:Provider"] = "Local",
+                ["ObjectStorage:PublicBaseUrl"] = "cdn.example.com/media"
+            })
+            .Build();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => services.AddObjectStorage(config));
+        Assert.Contains("PublicBaseUrl", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AddObjectStorage_Local_RegistersLocalAdapter()
     {
         var services = new ServiceCollection();

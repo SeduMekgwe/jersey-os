@@ -9,9 +9,10 @@
 - **Import:** suppliers (upload + HTTP + Playwright scrape feeds), CSV/JSON batches, scrape run logs, review-queue items, approve-to-draft catalog writes.
 - **Publishing:** sales channels, external ID maps, publish runs, outbound sync to Shopify and WooCommerce, inbound Shopify order/fulfillment/refund webhooks for inventory reservation.
 - **AI:** prompt templates, generation jobs (titles/descriptions/SEO/alt text), operator approve-before-apply onto catalog or import items.
-- **Operations:** scheduled work, operational workflows, and their status.
+- **Operations:** scheduled work, operational workflows, live job status, and their status.
 - **Notifications:** message intent, templates, delivery attempts, provider adapters.
 - **Audit:** append-only security and business audit records.
+- **Integrations:** hashed machine API keys and their permission scopes (Access/Identity adjacent).
 
 Names describe ownership, not required deployment units. A new module needs a cohesive capability, its own model and data ownership, and an explicit public contract.
 

@@ -16,6 +16,8 @@ public static class AuditActions
     public const string CollectionCreated = "collection.created";
     public const string CollectionDeleted = "collection.deleted";
     public const string SupplierFeedUpdated = "supplier.feed.updated";
+    public const string ApiKeyCreated = "integrations.apikey.created";
+    public const string ApiKeyRevoked = "integrations.apikey.revoked";
 }
 
 public static class NotificationKinds

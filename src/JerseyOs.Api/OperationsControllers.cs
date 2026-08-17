@@ -39,3 +39,33 @@ public sealed class NotificationsController(ISender sender) : ControllerBase
     public Task<IReadOnlyCollection<NotificationMessageResponse>> ListMessages(CancellationToken cancellationToken) =>
         sender.Send(new ListNotificationMessagesQuery(), cancellationToken);
 }
+
+[ApiController]
+[ApiVersion(1.0)]
+[Authorize(Policy = Permissions.IntegrationsManage)]
+[Route("api/v{version:apiVersion}/integrations/api-keys")]
+public sealed class ApiKeysController(ISender sender) : ControllerBase
+{
+    [HttpGet]
+    [ProducesResponseType<IReadOnlyCollection<ApiKeyResponse>>(StatusCodes.Status200OK)]
+    public Task<IReadOnlyCollection<ApiKeyResponse>> List(CancellationToken cancellationToken) =>
+        sender.Send(new ListApiKeysQuery(), cancellationToken);
+
+    [HttpPost]
+    [ProducesResponseType<CreatedApiKeyResponse>(StatusCodes.Status201Created)]
+    public async Task<ActionResult<CreatedApiKeyResponse>> Create(
+        CreateApiKeyRequest request, CancellationToken cancellationToken)
+    {
+        var created = await sender.Send(new CreateApiKeyCommand(request.Name, request.Scopes), cancellationToken);
+        return Created($"/api/v1/integrations/api-keys/{created.Id}", created);
+    }
+
+    [HttpPost("{apiKeyId:guid}/revoke")]
+    [ProducesResponseType<ApiKeyResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiKeyResponse>> Revoke(Guid apiKeyId, CancellationToken cancellationToken)
+    {
+        var revoked = await sender.Send(new RevokeApiKeyCommand(apiKeyId), cancellationToken);
+        return revoked is null ? NotFound() : Ok(revoked);
+    }
+}

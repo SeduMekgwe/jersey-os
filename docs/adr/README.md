@@ -25,4 +25,5 @@ ADRs are immutable decision history. Supersede an accepted ADR with a new ADR; d
 - [0021 — Catalog SEO and collections](0021-catalog-seo-collections.md)
 - [0022 — AI content engine](0022-ai-content-engine.md)
 - [0023 — Notifications and audit modules](0023-notifications-audit.md)
+- [0024 — Hosting polish (CDN URLs, Blob RBAC, live ops status, API keys)](0024-hosting-polish.md)
 - [Template](template.md)

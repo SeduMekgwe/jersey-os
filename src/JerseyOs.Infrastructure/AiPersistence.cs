@@ -181,6 +181,7 @@ public sealed class OpenAiContentGenerator(IHttpClientFactory httpFactory, IOpti
 public sealed class GenerateAiContentJob(
     JerseyOsDbContext db,
     IAiContentGenerator generator,
+    IOpsStatusPublisher ops,
     TimeProvider time)
 {
     [Queue("ai")]
@@ -233,11 +234,29 @@ public sealed class GenerateAiContentJob(
                 result.EstimatedCostUsd,
                 time.GetUtcNow());
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await ops.PublishAsync(
+                    new OpsStatusEvent(
+                        generation.OrganizationId,
+                        OpsStatusKinds.AiGeneration,
+                        generation.Id.ToString("N"),
+                        generation.Status.ToString(),
+                        DateTimeOffset.UtcNow),
+                    cancellationToken)
+                .ConfigureAwait(false);
         }
         catch (Exception exception)
         {
             generation.MarkFailed(exception.Message, time.GetUtcNow());
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await ops.PublishAsync(
+                    new OpsStatusEvent(
+                        generation.OrganizationId,
+                        OpsStatusKinds.AiGeneration,
+                        generation.Id.ToString("N"),
+                        generation.Status.ToString(),
+                        DateTimeOffset.UtcNow),
+                    cancellationToken)
+                .ConfigureAwait(false);
         }
     }
 

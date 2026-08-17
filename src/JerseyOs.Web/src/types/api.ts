@@ -35,6 +35,8 @@ export type CreateAiGenerationDto = components['schemas']['CreateAiGenerationReq
 export type AuditEventDto = components['schemas']['AuditEventResponse'];
 export type NotificationMessageDto = components['schemas']['NotificationMessageResponse'];
 export type NotificationTemplateDto = components['schemas']['NotificationTemplateResponse'];
+export type ApiKeyDto = components['schemas']['ApiKeyResponse'];
+export type CreatedApiKeyDto = components['schemas']['CreatedApiKeyResponse'];
 
 export interface SessionDto {
   accessToken: components['schemas']['AuthResponse']['accessToken'];

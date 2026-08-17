@@ -22,10 +22,12 @@ Configuration is loaded from `appsettings*.json`, environment variables, and an 
 | `ObjectStorage__Provider` | Storage adapter (`Local` \| `AzureBlob`; default `Local`) | No | All |
 | `ObjectStorage__LocalRootPath` | Local filesystem root for media | No | Local |
 | `ObjectStorage__PublicBasePath` | Relative public URL prefix for media (`/media`) | No | Local |
-| `ObjectStorage__PublicBaseUrl` | Optional absolute public base (e.g. `https://api.example.com/media`); Local uses it for absolute `GetUrl`; Azure falls back to it when Azure public base is empty | No | Hosted |
-| `ObjectStorage__AzureBlob__ConnectionString` | Azure Storage connection string | Yes | When `Provider=AzureBlob` |
+| `ObjectStorage__PublicBaseUrl` | Optional absolute public/CDN base (e.g. `https://cdn.example.com/media` or custom domain). Must be absolute http(s) when set. Local uses it for absolute `GetUrl`; Azure falls back to it when Azure public base is empty | No | Hosted |
+| `ObjectStorage__AzureBlob__AuthMode` | `ConnectionString` (default) or `ManagedIdentity` | No | When `Provider=AzureBlob` |
+| `ObjectStorage__AzureBlob__ConnectionString` | Azure Storage connection string | Yes | When `Provider=AzureBlob` and `AuthMode=ConnectionString` |
+| `ObjectStorage__AzureBlob__ServiceUri` | Blob service URI (e.g. `https://account.blob.core.windows.net`) | No | When `AuthMode=ManagedIdentity` |
 | `ObjectStorage__AzureBlob__ContainerName` | Blob container name (created if missing) | No | When `Provider=AzureBlob` |
-| `ObjectStorage__AzureBlob__PublicBaseUrl` | Optional override for absolute blob/CDN base URL | No | When `Provider=AzureBlob` |
+| `ObjectStorage__AzureBlob__PublicBaseUrl` | Optional override for absolute blob/CDN/custom-domain base URL | No | When `Provider=AzureBlob` |
 | `Database__ConnectionString` | SQL Server connection | Yes | All |
 | `Database__DefaultOrganizationId` | Default org for single-tenant-ready mode | No | All |
 | `Jwt__SigningKey` | HMAC signing material (min 32 bytes) | Yes | All |
