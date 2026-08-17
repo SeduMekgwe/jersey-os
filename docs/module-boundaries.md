@@ -3,7 +3,8 @@
 ## Initial modules
 
 - **Identity:** credentials, sessions, refresh-token families, account lifecycle.
-- **Organizations:** organization identity, membership, invitations, tenant context.
+- **Organizations:** organization identity, membership, invitations, tenant context, quotas, and per-tenant channel settings.
+- **Access:** roles, permissions, assignments, authorization decisions. Tenant Admin excludes `platform.admin`; Member is catalog/import-oriented.
 - **Access:** roles, permissions, assignments, authorization decisions.
 - **Catalog:** products, variants (unit price, cost, compare-at), pricing rules (markup/margin/compare-at, optional channel overrides), SEO metadata, collections (manual + taxonomy membership), taxonomy (team/season/category/tag), images, inventory levels; org default currency.
 - **Import:** suppliers (upload + HTTP + Playwright scrape feeds), CSV/JSON batches, scrape run logs, review-queue items, approve-to-draft catalog writes.

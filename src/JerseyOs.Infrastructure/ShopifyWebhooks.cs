@@ -12,9 +12,9 @@ namespace JerseyOs.Infrastructure;
 
 public sealed class ShopifyWebhookHmac(IOptions<ShopifyOptions> options) : IShopifyWebhookHmac
 {
-    public bool IsValid(string rawBody, string? hmacHeader)
+    public bool IsValid(string rawBody, string? hmacHeader, string? webhookSecret = null)
     {
-        var secret = options.Value.WebhookSecret;
+        var secret = string.IsNullOrWhiteSpace(webhookSecret) ? options.Value.WebhookSecret : webhookSecret;
         if (string.IsNullOrWhiteSpace(secret) || string.IsNullOrWhiteSpace(hmacHeader))
         {
             return false;

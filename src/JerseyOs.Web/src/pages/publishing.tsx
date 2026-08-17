@@ -1,9 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/auth/auth-context';
-import { Button, Card } from '@/components/ui';
+import { Button, Card, Input } from '@/components/ui';
 import { apiRequest } from '@/lib/api';
-import type { PublishRunDto, SalesChannelDto, WebhookDeliveryDto } from '@/types/api';
+import type {
+  OrganizationIntegrationSettingsDto,
+  PublishRunDto,
+  SalesChannelDto,
+  WebhookDeliveryDto,
+} from '@/types/api';
 
 export function PublishingPage() {
   const queryClient = useQueryClient();
@@ -44,6 +50,8 @@ export function PublishingPage() {
           only when its credentials are configured.
         </p>
       </div>
+
+      {canManage && <ChannelSettings />}
 
       <section className="space-y-3">
         <h2 className="text-lg font-medium">Channels</h2>
@@ -121,5 +129,131 @@ export function PublishingPage() {
         )}
       </section>
     </div>
+  );
+}
+
+function ChannelSettings() {
+  const queryClient = useQueryClient();
+  const [shopDomain, setShopDomain] = useState('');
+  const [shopifyToken, setShopifyToken] = useState('');
+  const [shopifyWebhook, setShopifyWebhook] = useState('');
+  const [shopifyVersion, setShopifyVersion] = useState('');
+  const [wooUrl, setWooUrl] = useState('');
+  const [wooKey, setWooKey] = useState('');
+  const [wooSecret, setWooSecret] = useState('');
+  const [wooVersion, setWooVersion] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const settingsQuery = useQuery({
+    queryKey: ['publishing', 'settings'],
+    queryFn: () => apiRequest<OrganizationIntegrationSettingsDto>('/publishing/settings'),
+  });
+
+  useEffect(() => {
+    if (!settingsQuery.data) return;
+    setShopDomain(settingsQuery.data.shopifyShopDomain ?? '');
+    setShopifyVersion(settingsQuery.data.shopifyApiVersion ?? '');
+    setWooUrl(settingsQuery.data.wooStoreBaseUrl ?? '');
+    setWooVersion(settingsQuery.data.wooApiVersion ?? '');
+  }, [settingsQuery.data]);
+
+  const save = useMutation({
+    mutationFn: () =>
+      apiRequest<OrganizationIntegrationSettingsDto>('/publishing/settings', {
+        method: 'PUT',
+        body: JSON.stringify({
+          shopifyShopDomain: shopDomain || null,
+          shopifyAccessToken: shopifyToken || null,
+          shopifyWebhookSecret: shopifyWebhook || null,
+          shopifyApiVersion: shopifyVersion || null,
+          wooStoreBaseUrl: wooUrl || null,
+          wooConsumerKey: wooKey || null,
+          wooConsumerSecret: wooSecret || null,
+          wooApiVersion: wooVersion || null,
+        }),
+      }),
+    onSuccess: () => {
+      setError(null);
+      setShopifyToken('');
+      setShopifyWebhook('');
+      setWooKey('');
+      setWooSecret('');
+      void queryClient.invalidateQueries({ queryKey: ['publishing', 'settings'] });
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
+  const settings = settingsQuery.data;
+  return (
+    <section className="space-y-3">
+      <h2 className="text-lg font-medium">Channel credentials</h2>
+      <p className="text-sm text-muted-foreground">
+        Per-organization overlay. Leave secrets blank to keep the current value. Global config is
+        used when a field is empty.
+      </p>
+      {error && (
+        <Card className="border-destructive/50 p-4" role="alert">
+          {error}
+        </Card>
+      )}
+      <Card className="grid gap-3 p-4 md:grid-cols-2">
+        <label className="block text-sm">
+          Shopify shop domain
+          <Input className="mt-1" value={shopDomain} onChange={(e) => setShopDomain(e.target.value)} />
+        </label>
+        <label className="block text-sm">
+          Shopify API version
+          <Input
+            className="mt-1"
+            value={shopifyVersion}
+            onChange={(e) => setShopifyVersion(e.target.value)}
+          />
+        </label>
+        <label className="block text-sm">
+          Shopify access token {settings?.shopifyAccessTokenConfigured ? '(configured)' : ''}
+          <Input
+            className="mt-1"
+            type="password"
+            value={shopifyToken}
+            onChange={(e) => setShopifyToken(e.target.value)}
+          />
+        </label>
+        <label className="block text-sm">
+          Shopify webhook secret {settings?.shopifyWebhookSecretConfigured ? '(configured)' : ''}
+          <Input
+            className="mt-1"
+            type="password"
+            value={shopifyWebhook}
+            onChange={(e) => setShopifyWebhook(e.target.value)}
+          />
+        </label>
+        <label className="block text-sm">
+          WooCommerce store URL
+          <Input className="mt-1" value={wooUrl} onChange={(e) => setWooUrl(e.target.value)} />
+        </label>
+        <label className="block text-sm">
+          WooCommerce API version
+          <Input className="mt-1" value={wooVersion} onChange={(e) => setWooVersion(e.target.value)} />
+        </label>
+        <label className="block text-sm">
+          WooCommerce consumer key {settings?.wooConsumerKeyConfigured ? '(configured)' : ''}
+          <Input className="mt-1" type="password" value={wooKey} onChange={(e) => setWooKey(e.target.value)} />
+        </label>
+        <label className="block text-sm">
+          WooCommerce consumer secret {settings?.wooConsumerSecretConfigured ? '(configured)' : ''}
+          <Input
+            className="mt-1"
+            type="password"
+            value={wooSecret}
+            onChange={(e) => setWooSecret(e.target.value)}
+          />
+        </label>
+        <div className="md:col-span-2">
+          <Button disabled={save.isPending} onClick={() => save.mutate()}>
+            Save channel settings
+          </Button>
+        </div>
+      </Card>
+    </section>
   );
 }

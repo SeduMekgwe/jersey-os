@@ -17,16 +17,20 @@ public sealed record IssuedAuth(AuthResponse Response, string RefreshToken, Date
 
 public interface IIdentityService
 {
-    Task<IssuedAuth?> LoginAsync(string email, string password, CancellationToken cancellationToken);
+    Task<IssuedAuth?> LoginAsync(string email, string password, Guid? organizationId, CancellationToken cancellationToken);
     Task<IssuedAuth?> RefreshAsync(string refreshToken, CancellationToken cancellationToken);
     Task LogoutAsync(string? refreshToken, CancellationToken cancellationToken);
     Task<UserResponse?> GetCurrentAsync(CancellationToken cancellationToken);
+    Task<IssuedAuth?> SwitchOrganizationAsync(Guid organizationId, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<OrganizationMembershipResponse>> ListMembershipsAsync(CancellationToken cancellationToken);
 }
 
-public sealed record LoginCommand(string Email, string Password) : IRequest<IssuedAuth?>;
+public sealed record LoginCommand(string Email, string Password, Guid? OrganizationId = null) : IRequest<IssuedAuth?>;
 public sealed record RefreshCommand(string RefreshToken) : IRequest<IssuedAuth?>;
 public sealed record LogoutCommand(string? RefreshToken) : IRequest;
 public sealed record GetMeQuery : IRequest<UserResponse?>;
+public sealed record ListMyOrganizationsQuery : IRequest<IReadOnlyCollection<OrganizationMembershipResponse>>;
+public sealed record SwitchOrganizationCommand(Guid OrganizationId) : IRequest<IssuedAuth?>;
 
 public sealed class LoginValidator : AbstractValidator<LoginCommand>
 {
@@ -45,7 +49,7 @@ public sealed class RefreshValidator : AbstractValidator<RefreshCommand>
 public sealed class LoginHandler(IIdentityService identity) : IRequestHandler<LoginCommand, IssuedAuth?>
 {
     public Task<IssuedAuth?> Handle(LoginCommand request, CancellationToken cancellationToken) =>
-        identity.LoginAsync(request.Email, request.Password, cancellationToken);
+        identity.LoginAsync(request.Email, request.Password, request.OrganizationId, cancellationToken);
 }
 
 public sealed class RefreshHandler(IIdentityService identity) : IRequestHandler<RefreshCommand, IssuedAuth?>
@@ -64,6 +68,26 @@ public sealed class GetMeHandler(IIdentityService identity) : IRequestHandler<Ge
 {
     public Task<UserResponse?> Handle(GetMeQuery request, CancellationToken cancellationToken) =>
         identity.GetCurrentAsync(cancellationToken);
+}
+
+public sealed class ListMyOrganizationsHandler(IIdentityService identity)
+    : IRequestHandler<ListMyOrganizationsQuery, IReadOnlyCollection<OrganizationMembershipResponse>>
+{
+    public Task<IReadOnlyCollection<OrganizationMembershipResponse>> Handle(
+        ListMyOrganizationsQuery request, CancellationToken cancellationToken) =>
+        identity.ListMembershipsAsync(cancellationToken);
+}
+
+public sealed class SwitchOrganizationValidator : AbstractValidator<SwitchOrganizationCommand>
+{
+    public SwitchOrganizationValidator() => RuleFor(x => x.OrganizationId).NotEmpty();
+}
+
+public sealed class SwitchOrganizationHandler(IIdentityService identity)
+    : IRequestHandler<SwitchOrganizationCommand, IssuedAuth?>
+{
+    public Task<IssuedAuth?> Handle(SwitchOrganizationCommand request, CancellationToken cancellationToken) =>
+        identity.SwitchOrganizationAsync(request.OrganizationId, cancellationToken);
 }
 
 public sealed class ValidationBehavior<TRequest, TResponse>(IEnumerable<IValidator<TRequest>> validators)

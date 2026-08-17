@@ -56,7 +56,7 @@ public interface ISalesChannelPublisher
 /// </summary>
 public interface ISalesChannelPublisherResolver
 {
-    ISalesChannelPublisher? Resolve(string channelCode);
+    ISalesChannelPublisher? Resolve(string channelCode, Guid organizationId);
 }
 
 public interface IPublishingJobScheduler
@@ -68,7 +68,7 @@ public interface IPublishingJobScheduler
 
 public interface IShopifyWebhookHmac
 {
-    bool IsValid(string rawBody, string? hmacHeader);
+    bool IsValid(string rawBody, string? hmacHeader, string? webhookSecret = null);
 }
 
 public sealed record ListSalesChannelsQuery : IRequest<IReadOnlyCollection<SalesChannelResponse>>;

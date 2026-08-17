@@ -100,34 +100,35 @@ public sealed class WooCommerceSalesChannelPublisherTests
     [Fact]
     public void ResolverReturnsNullWhenWooCredentialsMissing()
     {
-        var resolver = new SalesChannelPublisherResolver(
-            new NullSalesChannelPublisher(),
-            CreateShopifyPublisher(new StubHandler((_, _) => Task.FromResult(JsonOk("{}")))),
-            CreateWooPublisher(new StubHandler((_, _) => Task.FromResult(JsonOk("{}")))),
-            Options.Create(new ShopifyOptions { AccessToken = "token" }),
-            Options.Create(new WooCommerceOptions()));
+        var resolver = CreateResolver(
+            new ShopifyPublishSettings("demo.myshopify.com", "token", "2025-01", ""),
+            new WooPublishSettings("", "", "", "v3"));
 
-        Assert.Null(resolver.Resolve(SalesChannelCodes.WooCommerce));
-        Assert.IsType<ShopifySalesChannelPublisher>(resolver.Resolve(SalesChannelCodes.Shopify));
+        Assert.Null(resolver.Resolve(SalesChannelCodes.WooCommerce, Guid.NewGuid()));
+        Assert.IsType<ShopifySalesChannelPublisher>(resolver.Resolve(SalesChannelCodes.Shopify, Guid.NewGuid()));
     }
 
     [Fact]
     public void ResolverReturnsNullPublisherWhenShopifyTokenMissing()
     {
-        var resolver = new SalesChannelPublisherResolver(
-            new NullSalesChannelPublisher(),
-            CreateShopifyPublisher(new StubHandler((_, _) => Task.FromResult(JsonOk("{}")))),
-            CreateWooPublisher(new StubHandler((_, _) => Task.FromResult(JsonOk("{}")))),
-            Options.Create(new ShopifyOptions()),
-            Options.Create(new WooCommerceOptions
-            {
-                StoreBaseUrl = "https://shop.example",
-                ConsumerKey = "ck",
-                ConsumerSecret = "cs"
-            }));
+        var resolver = CreateResolver(
+            new ShopifyPublishSettings("demo.myshopify.com", "", "2025-01", ""),
+            new WooPublishSettings("https://shop.example", "ck", "cs", "v3"));
 
-        Assert.IsType<NullSalesChannelPublisher>(resolver.Resolve(SalesChannelCodes.Shopify));
-        Assert.IsType<WooCommerceSalesChannelPublisher>(resolver.Resolve(SalesChannelCodes.WooCommerce));
+        Assert.IsType<NullSalesChannelPublisher>(resolver.Resolve(SalesChannelCodes.Shopify, Guid.NewGuid()));
+        Assert.IsType<WooCommerceSalesChannelPublisher>(resolver.Resolve(SalesChannelCodes.WooCommerce, Guid.NewGuid()));
+    }
+
+    private static SalesChannelPublisherResolver CreateResolver(
+        ShopifyPublishSettings shopify, WooPublishSettings woo)
+    {
+        var services = new ServiceCollection();
+        services.AddHttpClient("shopify");
+        services.AddHttpClient("woocommerce");
+        return new SalesChannelPublisherResolver(
+            new NullSalesChannelPublisher(),
+            services.BuildServiceProvider().GetRequiredService<IHttpClientFactory>(),
+            new FixedSettings(shopify, woo));
     }
 
     private static WooCommerceSalesChannelPublisher CreateWooPublisher(HttpMessageHandler handler)
@@ -162,6 +163,14 @@ public sealed class WooCommerceSalesChannelPublisherTests
 
     private static HttpResponseMessage JsonOk(string json) =>
         new(HttpStatusCode.OK) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
+
+    private sealed class FixedSettings(ShopifyPublishSettings shopify, WooPublishSettings woo)
+        : IOrganizationIntegrationSettings
+    {
+        public ShopifyPublishSettings ResolveShopify(Guid organizationId) => shopify;
+        public WooPublishSettings ResolveWoo(Guid organizationId) => woo;
+        public Guid? FindOrganizationByShopDomain(string? shopDomain) => null;
+    }
 
     private sealed class StubHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> responder)
         : HttpMessageHandler

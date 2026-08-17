@@ -72,6 +72,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/organizations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Organizations the current user belongs to */
+        get: operations["listMyOrganizations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/switch-organization": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Issue a new session for another membership */
+        post: operations["switchOrganization"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/invitations/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Accept an invitation token and start a session */
+        post: operations["acceptOrganizationInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/admin-probe": {
         parameters: {
             query?: never;
@@ -672,6 +723,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/publishing/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Per-organization Shopify and WooCommerce credential overlay */
+        get: operations["getOrganizationIntegrationSettings"];
+        /** Update per-organization channel credentials; omit secrets to keep current values */
+        put: operations["updateOrganizationIntegrationSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/publishing/channels/{channelId}": {
         parameters: {
             query?: never;
@@ -907,6 +976,73 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/organizations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List all organizations (platform.admin) */
+        get: operations["listOrganizations"];
+        put?: never;
+        /** Provision a tenant with admin user, roles, quotas, and channel seeds */
+        post: operations["provisionOrganization"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/organizations/{organizationId}/quotas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getOrganizationQuota"];
+        put: operations["updateOrganizationQuota"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/org/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listOrganizationInvitations"];
+        put?: never;
+        /** Create an invitation; plaintext token is returned once */
+        post: operations["createOrganizationInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/org/invitations/{invitationId}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["revokeOrganizationInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -915,6 +1051,8 @@ export interface components {
             /** Format: email */
             email: string;
             password: string;
+            /** Format: uuid */
+            organizationId?: string;
         };
         AuthResponse: {
             accessToken: string;
@@ -930,6 +1068,7 @@ export interface components {
             email: string;
             /** Format: uuid */
             organizationId: string;
+            organizationName: string;
             permissions: string[];
         };
         /** @enum {string} */
@@ -1483,6 +1622,106 @@ export interface components {
             /** Format: date-time */
             createdAtUtc: string;
         };
+        OrganizationSummaryResponse: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            slug: string;
+            defaultCurrency: string;
+            productCount: number;
+            memberCount: number;
+            /** Format: date-time */
+            createdAtUtc: string;
+        };
+        OrganizationQuotaResponse: {
+            /** Format: uuid */
+            organizationId: string;
+            maxProducts: number;
+            maxMembers: number;
+            maxImportBatchesPerDay: number;
+            maxAiGenerationsPerDay: number;
+            productCount: number;
+            memberCount: number;
+            importBatchesToday: number;
+            aiGenerationsToday: number;
+        };
+        UpdateOrganizationQuotaRequest: {
+            maxProducts: number;
+            maxMembers: number;
+            maxImportBatchesPerDay: number;
+            maxAiGenerationsPerDay: number;
+        };
+        ProvisionOrganizationRequest: {
+            name: string;
+            slug: string;
+            /** Format: email */
+            adminEmail: string;
+            adminPassword: string;
+            defaultCurrency?: string | null;
+        };
+        OrganizationMembershipResponse: {
+            /** Format: uuid */
+            organizationId: string;
+            name: string;
+            slug: string;
+            role: string;
+        };
+        SwitchOrganizationRequest: {
+            /** Format: uuid */
+            organizationId: string;
+        };
+        OrganizationInvitationResponse: {
+            /** Format: uuid */
+            id: string;
+            /** Format: email */
+            email: string;
+            role: string;
+            /** Format: date-time */
+            expiresAtUtc: string;
+            /** Format: date-time */
+            acceptedAtUtc?: string | null;
+            /** Format: date-time */
+            revokedAtUtc?: string | null;
+        };
+        CreatedOrganizationInvitationResponse: {
+            /** Format: uuid */
+            id: string;
+            /** Format: email */
+            email: string;
+            role: string;
+            plaintext: string;
+            /** Format: date-time */
+            expiresAtUtc: string;
+        };
+        CreateOrganizationInvitationRequest: {
+            /** Format: email */
+            email: string;
+            role: string;
+        };
+        AcceptOrganizationInvitationRequest: {
+            token: string;
+            password?: string | null;
+        };
+        OrganizationIntegrationSettingsResponse: {
+            shopifyShopDomain?: string | null;
+            shopifyAccessTokenConfigured: boolean;
+            shopifyWebhookSecretConfigured: boolean;
+            shopifyApiVersion?: string | null;
+            wooStoreBaseUrl?: string | null;
+            wooConsumerKeyConfigured: boolean;
+            wooConsumerSecretConfigured: boolean;
+            wooApiVersion?: string | null;
+        };
+        UpdateOrganizationIntegrationSettingsRequest: {
+            shopifyShopDomain?: string | null;
+            shopifyAccessToken?: string | null;
+            shopifyWebhookSecret?: string | null;
+            shopifyApiVersion?: string | null;
+            wooStoreBaseUrl?: string | null;
+            wooConsumerKey?: string | null;
+            wooConsumerSecret?: string | null;
+            wooApiVersion?: string | null;
+        };
     };
     responses: never;
     parameters: {
@@ -1613,6 +1852,95 @@ export interface operations {
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listMyOrganizations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Memberships */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationMembershipResponse"][];
+                };
+            };
+        };
+    };
+    switchOrganization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SwitchOrganizationRequest"];
+            };
+        };
+        responses: {
+            /** @description Switched */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthResponse"];
+                };
+            };
+            /** @description Not a member */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    acceptOrganizationInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcceptOrganizationInvitationRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthResponse"];
+                };
+            };
+            /** @description Invitation rejected */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rate limited */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3021,6 +3349,50 @@ export interface operations {
             };
         };
     };
+    getOrganizationIntegrationSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationIntegrationSettingsResponse"];
+                };
+            };
+        };
+    };
+    updateOrganizationIntegrationSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateOrganizationIntegrationSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationIntegrationSettingsResponse"];
+                };
+            };
+        };
+    };
     setSalesChannelEnabled: {
         parameters: {
             query?: never;
@@ -3408,6 +3780,185 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiKeyResponse"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listOrganizations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Organizations */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationSummaryResponse"][];
+                };
+            };
+        };
+    };
+    provisionOrganization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProvisionOrganizationRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationSummaryResponse"];
+                };
+            };
+        };
+    };
+    getOrganizationQuota: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Quota */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationQuotaResponse"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    updateOrganizationQuota: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateOrganizationQuotaRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationQuotaResponse"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listOrganizationInvitations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Invitations */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationInvitationResponse"][];
+                };
+            };
+        };
+    };
+    createOrganizationInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateOrganizationInvitationRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedOrganizationInvitationResponse"];
+                };
+            };
+        };
+    };
+    revokeOrganizationInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invitationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationInvitationResponse"];
                 };
             };
             /** @description Not found */

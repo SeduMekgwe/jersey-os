@@ -119,7 +119,8 @@ public sealed class AuthController(ISender sender) : ControllerBase
     [ProducesResponseType<AuthResponse>(StatusCodes.Status200OK)]
     public async Task<ActionResult<AuthResponse>> Login(LoginRequest request, CancellationToken cancellationToken)
     {
-        var issued = await sender.Send(new LoginCommand(request.Email, request.Password), cancellationToken);
+        var issued = await sender.Send(
+            new LoginCommand(request.Email, request.Password, request.OrganizationId), cancellationToken);
         if (issued is null) return Unauthorized();
         SetRefreshCookie(issued);
         return Ok(issued.Response);
@@ -157,6 +158,40 @@ public sealed class AuthController(ISender sender) : ControllerBase
     {
         var user = await sender.Send(new GetMeQuery(), cancellationToken);
         return user is null ? Unauthorized() : Ok(user);
+    }
+
+    [HttpGet("organizations")]
+    [Authorize]
+    [ProducesResponseType<IReadOnlyCollection<OrganizationMembershipResponse>>(StatusCodes.Status200OK)]
+    public Task<IReadOnlyCollection<OrganizationMembershipResponse>> Organizations(CancellationToken cancellationToken) =>
+        sender.Send(new ListMyOrganizationsQuery(), cancellationToken);
+
+    [HttpPost("switch-organization")]
+    [Authorize]
+    [ProducesResponseType<AuthResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<AuthResponse>> SwitchOrganization(
+        SwitchOrganizationRequest request, CancellationToken cancellationToken)
+    {
+        var issued = await sender.Send(new SwitchOrganizationCommand(request.OrganizationId), cancellationToken);
+        if (issued is null) return Unauthorized();
+        SetRefreshCookie(issued);
+        return Ok(issued.Response);
+    }
+
+    [HttpPost("invitations/accept")]
+    [AllowAnonymous]
+    [EnableRateLimiting("auth")]
+    [ProducesResponseType<AuthResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<AuthResponse>> AcceptInvitation(
+        AcceptOrganizationInvitationRequest request, CancellationToken cancellationToken)
+    {
+        var issued = await sender.Send(
+            new AcceptOrganizationInvitationCommand(request.Token, request.Password), cancellationToken);
+        if (issued is null) return Unauthorized();
+        SetRefreshCookie(issued);
+        return Ok(issued.Response);
     }
 
     [HttpGet("admin-probe")]

@@ -348,23 +348,34 @@ public sealed class WooCommerceSalesChannelPublisher(
 
 public sealed class SalesChannelPublisherResolver(
     NullSalesChannelPublisher nullPublisher,
-    ShopifySalesChannelPublisher shopifyPublisher,
-    WooCommerceSalesChannelPublisher wooCommercePublisher,
-    IOptions<ShopifyOptions> shopifyOptions,
-    IOptions<WooCommerceOptions> wooCommerceOptions) : ISalesChannelPublisherResolver
+    IHttpClientFactory httpClientFactory,
+    IOrganizationIntegrationSettings integrationSettings) : ISalesChannelPublisherResolver
 {
-    public ISalesChannelPublisher? Resolve(string channelCode)
+    public ISalesChannelPublisher? Resolve(string channelCode, Guid organizationId)
     {
         if (string.Equals(channelCode, SalesChannelCodes.Shopify, StringComparison.OrdinalIgnoreCase))
         {
-            return string.IsNullOrWhiteSpace(shopifyOptions.Value.AccessToken)
-                ? nullPublisher
-                : shopifyPublisher;
+            var shopify = integrationSettings.ResolveShopify(organizationId);
+            if (string.IsNullOrWhiteSpace(shopify.AccessToken))
+            {
+                return nullPublisher;
+            }
+
+            return new ShopifySalesChannelPublisher(
+                httpClientFactory,
+                Options.Create(
+                    new ShopifyOptions
+                    {
+                        ShopDomain = shopify.ShopDomain,
+                        AccessToken = shopify.AccessToken,
+                        ApiVersion = shopify.ApiVersion,
+                        WebhookSecret = shopify.WebhookSecret
+                    }));
         }
 
         if (string.Equals(channelCode, SalesChannelCodes.WooCommerce, StringComparison.OrdinalIgnoreCase))
         {
-            var woo = wooCommerceOptions.Value;
+            var woo = integrationSettings.ResolveWoo(organizationId);
             if (string.IsNullOrWhiteSpace(woo.StoreBaseUrl)
                 || string.IsNullOrWhiteSpace(woo.ConsumerKey)
                 || string.IsNullOrWhiteSpace(woo.ConsumerSecret))
@@ -372,7 +383,16 @@ public sealed class SalesChannelPublisherResolver(
                 return null;
             }
 
-            return wooCommercePublisher;
+            return new WooCommerceSalesChannelPublisher(
+                httpClientFactory,
+                Options.Create(
+                    new WooCommerceOptions
+                    {
+                        StoreBaseUrl = woo.StoreBaseUrl,
+                        ConsumerKey = woo.ConsumerKey,
+                        ConsumerSecret = woo.ConsumerSecret,
+                        ApiVersion = woo.ApiVersion
+                    }));
         }
 
         return null;

@@ -18,6 +18,13 @@ public static class AuditActions
     public const string SupplierFeedUpdated = "supplier.feed.updated";
     public const string ApiKeyCreated = "integrations.apikey.created";
     public const string ApiKeyRevoked = "integrations.apikey.revoked";
+    public const string OrganizationProvisioned = "org.provisioned";
+    public const string OrganizationQuotaUpdated = "org.quota.updated";
+    public const string InvitationCreated = "org.invitation.created";
+    public const string InvitationAccepted = "org.invitation.accepted";
+    public const string InvitationRevoked = "org.invitation.revoked";
+    public const string OrganizationSettingsUpdated = "org.settings.updated";
+    public const string OrganizationSwitched = "auth.organization.switched";
 }
 
 public static class NotificationKinds

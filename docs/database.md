@@ -127,6 +127,8 @@ Tables are prefixed `ai_` and organization-filtered: `ai_prompt_templates` and `
 
 `AuditLogs` is append-only (no update/delete API). Notification tables are `notification_templates`, `notification_messages`, and `notification_deliveries`. Machine API keys are `integration_api_keys` (SHA-256 of plaintext; prefix for display; scopes as a comma-separated permission list).
 
+Tenant SaaS tables are `organization_quotas` (1:1 with organization), `organization_settings` (key/value overlay for Shopify/Woo credentials; secrets stored but never returned), and `organization_invitations` (SHA-256 invitation tokens, unique hash).
+
 ## Publishing model
 
 Tables are prefixed `publish_` and organization-filtered.

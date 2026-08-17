@@ -126,13 +126,15 @@ public sealed class ListAiGenerationsHandler(IApplicationDbContext db)
 public sealed class EnqueueAiGenerationHandler(
     IApplicationDbContext db,
     ICurrentRequest current,
-    IAiJobScheduler jobs) : IRequestHandler<EnqueueAiGenerationCommand, AiGenerationResponse>
+    IAiJobScheduler jobs,
+    IQuotaGuard quotas) : IRequestHandler<EnqueueAiGenerationCommand, AiGenerationResponse>
 {
     public async Task<AiGenerationResponse> Handle(
         EnqueueAiGenerationCommand request, CancellationToken cancellationToken)
     {
         var orgId = current.OrganizationId
             ?? throw new InvalidOperationException("Organization context is required.");
+        await quotas.EnsureAiCapacityAsync(orgId, cancellationToken).ConfigureAwait(false);
         var kind = request.Kind.Trim().ToLowerInvariant();
         var targetType = request.TargetType.Trim().ToLowerInvariant();
         if (string.Equals(kind, AiContentKinds.AltText, StringComparison.OrdinalIgnoreCase)

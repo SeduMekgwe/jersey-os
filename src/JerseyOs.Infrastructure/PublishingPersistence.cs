@@ -514,7 +514,7 @@ public sealed class PublishProductJob(
         bool unpublish,
         CancellationToken cancellationToken)
     {
-        var publisher = publisherResolver.Resolve(channel.Code);
+        var publisher = publisherResolver.Resolve(channel.Code, organizationId);
         var run = await EnsureRunAsync(organizationId, channel.Id, product.Id, cancellationToken)
             .ConfigureAwait(false);
         var now = time.GetUtcNow();
@@ -837,7 +837,7 @@ public sealed class SyncInventoryJob(
         Exception? firstFailure = null;
         foreach (var channel in channels)
         {
-            var publisher = publisherResolver.Resolve(channel.Code);
+            var publisher = publisherResolver.Resolve(channel.Code, organizationId);
             if (publisher is null)
             {
                 continue;

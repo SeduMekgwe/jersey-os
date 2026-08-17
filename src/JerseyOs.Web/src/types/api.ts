@@ -37,6 +37,13 @@ export type NotificationMessageDto = components['schemas']['NotificationMessageR
 export type NotificationTemplateDto = components['schemas']['NotificationTemplateResponse'];
 export type ApiKeyDto = components['schemas']['ApiKeyResponse'];
 export type CreatedApiKeyDto = components['schemas']['CreatedApiKeyResponse'];
+export type OrganizationSummaryDto = components['schemas']['OrganizationSummaryResponse'];
+export type OrganizationQuotaDto = components['schemas']['OrganizationQuotaResponse'];
+export type OrganizationMembershipDto = components['schemas']['OrganizationMembershipResponse'];
+export type OrganizationInvitationDto = components['schemas']['OrganizationInvitationResponse'];
+export type CreatedOrganizationInvitationDto = components['schemas']['CreatedOrganizationInvitationResponse'];
+export type OrganizationIntegrationSettingsDto =
+  components['schemas']['OrganizationIntegrationSettingsResponse'];
 
 export interface SessionDto {
   accessToken: components['schemas']['AuthResponse']['accessToken'];

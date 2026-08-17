@@ -55,6 +55,29 @@ public sealed class PublishingController(ISender sender) : ControllerBase
         return run is null ? NotFound() : Ok(run);
     }
 
+    [HttpGet("settings")]
+    [Authorize(Policy = Permissions.PublishingManage)]
+    [ProducesResponseType<OrganizationIntegrationSettingsResponse>(StatusCodes.Status200OK)]
+    public Task<OrganizationIntegrationSettingsResponse> GetSettings(CancellationToken cancellationToken) =>
+        sender.Send(new GetOrganizationIntegrationSettingsQuery(), cancellationToken);
+
+    [HttpPut("settings")]
+    [Authorize(Policy = Permissions.PublishingManage)]
+    [ProducesResponseType<OrganizationIntegrationSettingsResponse>(StatusCodes.Status200OK)]
+    public Task<OrganizationIntegrationSettingsResponse> UpdateSettings(
+        UpdateOrganizationIntegrationSettingsRequest request, CancellationToken cancellationToken) =>
+        sender.Send(
+            new UpdateOrganizationIntegrationSettingsCommand(
+                request.ShopifyShopDomain,
+                request.ShopifyAccessToken,
+                request.ShopifyWebhookSecret,
+                request.ShopifyApiVersion,
+                request.WooStoreBaseUrl,
+                request.WooConsumerKey,
+                request.WooConsumerSecret,
+                request.WooApiVersion),
+            cancellationToken);
+
     [HttpGet("webhook-deliveries")]
     [ProducesResponseType<IReadOnlyCollection<WebhookDeliveryResponse>>(StatusCodes.Status200OK)]
     public Task<IReadOnlyCollection<WebhookDeliveryResponse>> ListWebhookDeliveries(
@@ -69,6 +92,7 @@ public sealed class PublishingController(ISender sender) : ControllerBase
 public sealed class ShopifyWebhookController(
     ISender sender,
     IShopifyWebhookHmac hmac,
+    IOrganizationIntegrationSettings integrationSettings,
     IOptions<DatabaseOptions> databaseOptions) : ControllerBase
 {
     [HttpPost("shopify")]
@@ -81,7 +105,16 @@ public sealed class ShopifyWebhookController(
         using var reader = new StreamReader(Request.Body, Encoding.UTF8, detectEncodingFromByteOrderMarks: false, leaveOpen: true);
         var body = await reader.ReadToEndAsync(cancellationToken);
         var hmacHeader = Request.Headers["X-Shopify-Hmac-Sha256"].ToString();
-        if (!hmac.IsValid(body, hmacHeader))
+        var shopDomain = Request.Headers["X-Shopify-Shop-Domain"].ToString();
+        var orgId = integrationSettings.FindOrganizationByShopDomain(shopDomain)
+            ?? databaseOptions.Value.DefaultOrganizationId;
+        if (orgId == Guid.Empty)
+        {
+            return BadRequest();
+        }
+
+        var shopify = integrationSettings.ResolveShopify(orgId);
+        if (!hmac.IsValid(body, hmacHeader, shopify.WebhookSecret))
         {
             return Unauthorized();
         }
@@ -89,12 +122,6 @@ public sealed class ShopifyWebhookController(
         var topic = Request.Headers["X-Shopify-Topic"].ToString();
         var webhookId = Request.Headers["X-Shopify-Webhook-Id"].ToString();
         if (string.IsNullOrWhiteSpace(topic) || string.IsNullOrWhiteSpace(webhookId))
-        {
-            return BadRequest();
-        }
-
-        var orgId = databaseOptions.Value.DefaultOrganizationId;
-        if (orgId == Guid.Empty)
         {
             return BadRequest();
         }

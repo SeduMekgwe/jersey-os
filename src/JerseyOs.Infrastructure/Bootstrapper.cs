@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace JerseyOs.Infrastructure;
 
@@ -27,6 +28,7 @@ public static class Bootstrapper
 
         var db = services.GetRequiredService<JerseyOsDbContext>();
         var users = services.GetRequiredService<UserManager<ApplicationUser>>();
+        var tenancy = services.GetRequiredService<IOptions<TenancyOptions>>().Value;
         var now = TimeProvider.System.GetUtcNow();
         var organization = await db.OrganizationsSet.IgnoreQueryFilters()
             .SingleOrDefaultAsync(x => x.Id == organizationId, cancellationToken);
@@ -39,18 +41,11 @@ public static class Bootstrapper
         {
             organization.SetDefaultCurrency("ZAR");
         }
-        var permissions = new List<PermissionDefinition>();
-        foreach (var key in Permissions.All)
-        {
-            var permission = await db.PermissionsSet.SingleOrDefaultAsync(x => x.Key == key, cancellationToken);
-            if (permission is null)
-            {
-                permission = new PermissionDefinition { Key = key, Description = key };
-                db.PermissionsSet.Add(permission);
-            }
-            permissions.Add(permission);
-        }
+
         await db.SaveChangesAsync(cancellationToken);
+        await OrganizationSeeder.SeedOrganizationAsync(
+                db, organizationId, grantPlatformAdmin: true, tenancy, cancellationToken)
+            .ConfigureAwait(false);
 
         var user = await users.FindByEmailAsync(email);
         if (user is null)
@@ -60,91 +55,27 @@ public static class Bootstrapper
             if (!result.Succeeded)
                 throw new InvalidOperationException(string.Join("; ", result.Errors.Select(x => x.Description)));
         }
+
         var membership = await db.OrganizationMemberships.IgnoreQueryFilters()
             .SingleOrDefaultAsync(x => x.OrganizationId == organizationId && x.UserId == user.Id, cancellationToken);
         if (membership is null)
         {
             membership = new OrganizationMembership { OrganizationId = organizationId, UserId = user.Id };
             db.OrganizationMemberships.Add(membership);
+            await db.SaveChangesAsync(cancellationToken);
         }
-        var role = await db.Roles.IgnoreQueryFilters()
-            .SingleOrDefaultAsync(x => x.OrganizationId == organizationId && x.NormalizedName == "ADMIN", cancellationToken);
-        if (role is null)
-        {
-            role = new ApplicationRole { OrganizationId = organizationId, Name = "Admin", NormalizedName = "ADMIN" };
-            db.Roles.Add(role);
-        }
-        await db.SaveChangesAsync(cancellationToken);
 
+        var role = await db.Roles.IgnoreQueryFilters()
+            .SingleAsync(x => x.OrganizationId == organizationId && x.NormalizedName == "ADMIN", cancellationToken);
         if (!await db.MembershipRoles.IgnoreQueryFilters()
-            .AnyAsync(x => x.MembershipId == membership.Id && x.RoleId == role.Id, cancellationToken))
+                .AnyAsync(x => x.MembershipId == membership.Id && x.RoleId == role.Id, cancellationToken))
+        {
             db.MembershipRoles.Add(new MembershipRole
             {
                 OrganizationId = organizationId,
                 MembershipId = membership.Id,
                 RoleId = role.Id
             });
-        foreach (var permission in permissions)
-        {
-            if (!await db.RolePermissions.IgnoreQueryFilters()
-                .AnyAsync(x => x.RoleId == role.Id && x.PermissionId == permission.Id, cancellationToken))
-                db.RolePermissions.Add(new RolePermissionGrant
-                {
-                    OrganizationId = organizationId,
-                    RoleId = role.Id,
-                    PermissionId = permission.Id
-                });
-        }
-
-        if (!await db.SalesChannelsSet.IgnoreQueryFilters()
-                .AnyAsync(
-                    x => x.OrganizationId == organizationId && x.Code == SalesChannelCodes.Shopify,
-                    cancellationToken))
-        {
-            db.SalesChannelsSet.Add(new SalesChannel(organizationId, SalesChannelCodes.Shopify, "Shopify", enabled: true));
-        }
-
-        if (!await db.SalesChannelsSet.IgnoreQueryFilters()
-                .AnyAsync(
-                    x => x.OrganizationId == organizationId && x.Code == SalesChannelCodes.WooCommerce,
-                    cancellationToken))
-        {
-            db.SalesChannelsSet.Add(
-                new SalesChannel(organizationId, SalesChannelCodes.WooCommerce, "WooCommerce", enabled: false));
-        }
-
-        foreach (var spec in AiDefaultPromptTemplates.All)
-        {
-            if (!await db.AiPromptTemplatesSet.IgnoreQueryFilters()
-                    .AnyAsync(
-                        x => x.OrganizationId == organizationId && x.Kind == spec.Kind,
-                        cancellationToken))
-            {
-                db.AiPromptTemplatesSet.Add(
-                    new AiPromptTemplate(
-                        organizationId,
-                        spec.Name,
-                        spec.Kind,
-                        spec.SystemPrompt,
-                        spec.UserPromptTemplate));
-            }
-        }
-
-        foreach (var spec in NotificationTemplate.Defaults)
-        {
-            if (!await db.NotificationTemplatesSet.IgnoreQueryFilters()
-                    .AnyAsync(
-                        x => x.OrganizationId == organizationId && x.Kind == spec.Kind,
-                        cancellationToken))
-            {
-                db.NotificationTemplatesSet.Add(
-                    new NotificationTemplate(
-                        organizationId,
-                        spec.Kind,
-                        spec.Name,
-                        spec.Subject,
-                        spec.Body));
-            }
         }
 
         await db.SaveChangesAsync(cancellationToken);

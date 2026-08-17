@@ -1,13 +1,16 @@
 import { createBrowserRouter } from 'react-router-dom';
 import { RequireAuth, RequirePermission } from '@/auth/guards';
 import { AppShell } from '@/components/app-shell';
+import { AdminOrganizationsPage } from '@/pages/admin-organizations';
 import { AuditPage } from '@/pages/audit';
 import { CollectionsPage } from '@/pages/collections';
 import { DashboardPage } from '@/pages/dashboard';
 import { ImportBatchDetailPage } from '@/pages/import-batch-detail';
 import { ImportBatchesPage } from '@/pages/import-batches';
 import { IntegrationsPage } from '@/pages/integrations';
+import { InvitePage } from '@/pages/invite';
 import { LoginPage } from '@/pages/login';
+import { MembersPage } from '@/pages/members';
 import { NotificationsPage } from '@/pages/notifications';
 import { ProductDetailPage } from '@/pages/product-detail';
 import { ProductsListPage } from '@/pages/products-list';
@@ -19,6 +22,7 @@ import { TaxonomyPage } from '@/pages/taxonomy';
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
+  { path: '/invite/:token', element: <InvitePage /> },
   { path: '/unauthorized', element: <UnauthorizedPage /> },
   {
     element: <RequireAuth />,
@@ -66,6 +70,14 @@ export const router = createBrowserRouter([
           {
             element: <RequirePermission permission="integrations.manage" />,
             children: [{ path: 'integrations', element: <IntegrationsPage /> }],
+          },
+          {
+            element: <RequirePermission permission="org.members.manage" />,
+            children: [{ path: 'members', element: <MembersPage /> }],
+          },
+          {
+            element: <RequirePermission permission="platform.admin" />,
+            children: [{ path: 'admin/organizations', element: <AdminOrganizationsPage /> }],
           },
         ],
       },

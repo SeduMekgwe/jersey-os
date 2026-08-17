@@ -315,12 +315,14 @@ public sealed class UploadImportBatchHandler(
     IApplicationDbContext db,
     ICurrentRequest current,
     IObjectStorage storage,
-    IImportJobScheduler jobs) : IRequestHandler<UploadImportBatchCommand, ImportBatchSummaryResponse>
+    IImportJobScheduler jobs,
+    IQuotaGuard quotas) : IRequestHandler<UploadImportBatchCommand, ImportBatchSummaryResponse>
 {
     public async Task<ImportBatchSummaryResponse> Handle(
         UploadImportBatchCommand request, CancellationToken cancellationToken)
     {
         var orgId = current.OrganizationId ?? throw new InvalidOperationException("Organization context is required.");
+        await quotas.EnsureImportCapacityAsync(orgId, cancellationToken).ConfigureAwait(false);
         var supplier = await db.Suppliers.SingleOrDefaultAsync(x => x.Id == request.SupplierId, cancellationToken)
             ?? throw new InvalidOperationException("Supplier was not found.");
 

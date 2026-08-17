@@ -72,6 +72,64 @@ paths:
                 $ref: '#/components/schemas/UserResponse'
         '401':
           description: Unauthorized
+  /auth/organizations:
+    get:
+      operationId: listMyOrganizations
+      tags: [Auth]
+      summary: Organizations the current user belongs to
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Memberships
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OrganizationMembershipResponse'
+  /auth/switch-organization:
+    post:
+      operationId: switchOrganization
+      tags: [Auth]
+      summary: Issue a new session for another membership
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SwitchOrganizationRequest'
+      responses:
+        '200':
+          description: Switched
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Not a member
+  /auth/invitations/accept:
+    post:
+      operationId: acceptOrganizationInvitation
+      tags: [Auth]
+      summary: Accept an invitation token and start a session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcceptOrganizationInvitationRequest'
+      responses:
+        '200':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Invitation rejected
+        '429':
+          description: Rate limited
   /auth/admin-probe:
     get:
       operationId: adminProbe
@@ -1056,6 +1114,37 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/SalesChannelResponse'
+  /publishing/settings:
+    get:
+      operationId: getOrganizationIntegrationSettings
+      tags: [Publishing]
+      summary: Per-organization Shopify and WooCommerce credential overlay
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationIntegrationSettingsResponse'
+    put:
+      operationId: updateOrganizationIntegrationSettings
+      tags: [Publishing]
+      summary: Update per-organization channel credentials; omit secrets to keep current values
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateOrganizationIntegrationSettingsRequest'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationIntegrationSettingsResponse'
   /publishing/channels/{channelId}:
     put:
       operationId: setSalesChannelEnabled
@@ -1354,6 +1443,133 @@ paths:
                 $ref: '#/components/schemas/ApiKeyResponse'
         '404':
           description: Not found
+  /admin/organizations:
+    get:
+      operationId: listOrganizations
+      tags: [Admin]
+      summary: List all organizations (platform.admin)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Organizations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OrganizationSummaryResponse'
+    post:
+      operationId: provisionOrganization
+      tags: [Admin]
+      summary: Provision a tenant with admin user, roles, quotas, and channel seeds
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProvisionOrganizationRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationSummaryResponse'
+  /admin/organizations/{organizationId}/quotas:
+    get:
+      operationId: getOrganizationQuota
+      tags: [Admin]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: organizationId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Quota
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationQuotaResponse'
+        '404':
+          description: Not found
+    put:
+      operationId: updateOrganizationQuota
+      tags: [Admin]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: organizationId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateOrganizationQuotaRequest'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationQuotaResponse'
+        '404':
+          description: Not found
+  /org/invitations:
+    get:
+      operationId: listOrganizationInvitations
+      tags: [Organizations]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Invitations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OrganizationInvitationResponse'
+    post:
+      operationId: createOrganizationInvitation
+      tags: [Organizations]
+      summary: Create an invitation; plaintext token is returned once
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrganizationInvitationRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatedOrganizationInvitationResponse'
+  /org/invitations/{invitationId}/revoke:
+    post:
+      operationId: revokeOrganizationInvitation
+      tags: [Organizations]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: invitationId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Revoked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationInvitationResponse'
+        '404':
+          description: Not found
 components:
   securitySchemes:
     bearerAuth:
@@ -1392,6 +1608,9 @@ components:
         password:
           type: string
           minLength: 1
+        organizationId:
+          type: string
+          format: uuid
     AuthResponse:
       type: object
       required: [accessToken, accessTokenExpiresAtUtc, user]
@@ -1405,7 +1624,7 @@ components:
           $ref: '#/components/schemas/UserResponse'
     UserResponse:
       type: object
-      required: [id, displayName, email, organizationId, permissions]
+      required: [id, displayName, email, organizationId, organizationName, permissions]
       properties:
         id:
           type: string
@@ -1418,6 +1637,8 @@ components:
         organizationId:
           type: string
           format: uuid
+        organizationName:
+          type: string
         permissions:
           type: array
           items:
@@ -2026,3 +2247,112 @@ components:
           items: { type: string }
         plaintext: { type: string }
         createdAtUtc: { type: string, format: date-time }
+    OrganizationSummaryResponse:
+      type: object
+      required: [id, name, slug, defaultCurrency, productCount, memberCount, createdAtUtc]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        defaultCurrency: { type: string }
+        productCount: { type: integer }
+        memberCount: { type: integer }
+        createdAtUtc: { type: string, format: date-time }
+    OrganizationQuotaResponse:
+      type: object
+      required: [organizationId, maxProducts, maxMembers, maxImportBatchesPerDay, maxAiGenerationsPerDay, productCount, memberCount, importBatchesToday, aiGenerationsToday]
+      properties:
+        organizationId: { type: string, format: uuid }
+        maxProducts: { type: integer }
+        maxMembers: { type: integer }
+        maxImportBatchesPerDay: { type: integer }
+        maxAiGenerationsPerDay: { type: integer }
+        productCount: { type: integer }
+        memberCount: { type: integer }
+        importBatchesToday: { type: integer }
+        aiGenerationsToday: { type: integer }
+    UpdateOrganizationQuotaRequest:
+      type: object
+      required: [maxProducts, maxMembers, maxImportBatchesPerDay, maxAiGenerationsPerDay]
+      properties:
+        maxProducts: { type: integer }
+        maxMembers: { type: integer }
+        maxImportBatchesPerDay: { type: integer }
+        maxAiGenerationsPerDay: { type: integer }
+    ProvisionOrganizationRequest:
+      type: object
+      required: [name, slug, adminEmail, adminPassword]
+      properties:
+        name: { type: string }
+        slug: { type: string }
+        adminEmail: { type: string, format: email }
+        adminPassword: { type: string }
+        defaultCurrency: { type: string, nullable: true }
+    OrganizationMembershipResponse:
+      type: object
+      required: [organizationId, name, slug, role]
+      properties:
+        organizationId: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        role: { type: string }
+    SwitchOrganizationRequest:
+      type: object
+      required: [organizationId]
+      properties:
+        organizationId: { type: string, format: uuid }
+    OrganizationInvitationResponse:
+      type: object
+      required: [id, email, role, expiresAtUtc]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        role: { type: string }
+        expiresAtUtc: { type: string, format: date-time }
+        acceptedAtUtc: { type: string, format: date-time, nullable: true }
+        revokedAtUtc: { type: string, format: date-time, nullable: true }
+    CreatedOrganizationInvitationResponse:
+      type: object
+      required: [id, email, role, plaintext, expiresAtUtc]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        role: { type: string }
+        plaintext: { type: string }
+        expiresAtUtc: { type: string, format: date-time }
+    CreateOrganizationInvitationRequest:
+      type: object
+      required: [email, role]
+      properties:
+        email: { type: string, format: email }
+        role: { type: string }
+    AcceptOrganizationInvitationRequest:
+      type: object
+      required: [token]
+      properties:
+        token: { type: string }
+        password: { type: string, nullable: true }
+    OrganizationIntegrationSettingsResponse:
+      type: object
+      required: [shopifyAccessTokenConfigured, shopifyWebhookSecretConfigured, wooConsumerKeyConfigured, wooConsumerSecretConfigured]
+      properties:
+        shopifyShopDomain: { type: string, nullable: true }
+        shopifyAccessTokenConfigured: { type: boolean }
+        shopifyWebhookSecretConfigured: { type: boolean }
+        shopifyApiVersion: { type: string, nullable: true }
+        wooStoreBaseUrl: { type: string, nullable: true }
+        wooConsumerKeyConfigured: { type: boolean }
+        wooConsumerSecretConfigured: { type: boolean }
+        wooApiVersion: { type: string, nullable: true }
+    UpdateOrganizationIntegrationSettingsRequest:
+      type: object
+      properties:
+        shopifyShopDomain: { type: string, nullable: true }
+        shopifyAccessToken: { type: string, nullable: true }
+        shopifyWebhookSecret: { type: string, nullable: true }
+        shopifyApiVersion: { type: string, nullable: true }
+        wooStoreBaseUrl: { type: string, nullable: true }
+        wooConsumerKey: { type: string, nullable: true }
+        wooConsumerSecret: { type: string, nullable: true }
+        wooApiVersion: { type: string, nullable: true }
+

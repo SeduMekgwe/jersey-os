@@ -15,6 +15,7 @@ interface AuthState {
   isRestoring: boolean;
   login: (input: LoginRequestDto) => Promise<void>;
   logout: () => Promise<void>;
+  switchOrganization: (organizationId: string) => Promise<void>;
 }
 const AuthContext = createContext<AuthState | null>(null);
 
@@ -49,9 +50,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
     }
   }, []);
+  const switchOrganization = useCallback(async (organizationId: string) => {
+    const session = await apiRequest<SessionDto>('/auth/switch-organization', {
+      method: 'POST',
+      body: JSON.stringify({ organizationId }),
+    });
+    tokenStore.set(session.accessToken);
+    setUser(session.user);
+  }, []);
   const value = useMemo(
-    () => ({ user, isRestoring, login, logout }),
-    [user, isRestoring, login, logout],
+    () => ({ user, isRestoring, login, logout, switchOrganization }),
+    [user, isRestoring, login, logout, switchOrganization],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

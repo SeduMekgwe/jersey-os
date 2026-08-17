@@ -9,6 +9,7 @@ namespace JerseyOs.Application;
 public interface IApplicationDbContext
 {
     IQueryable<Organization> Organizations { get; }
+    IQueryable<OrganizationMembership> OrganizationMemberships { get; }
     IQueryable<RefreshTokenSession> RefreshTokenSessions { get; }
     IQueryable<OutboxMessage> OutboxMessages { get; }
     IQueryable<Product> Products { get; }
@@ -23,6 +24,9 @@ public interface IApplicationDbContext
     IQueryable<NotificationMessage> NotificationMessages { get; }
     IQueryable<NotificationDelivery> NotificationDeliveries { get; }
     IQueryable<ApiKeyCredential> ApiKeys { get; }
+    IQueryable<OrganizationQuota> OrganizationQuotas { get; }
+    IQueryable<OrganizationSetting> OrganizationSettings { get; }
+    IQueryable<OrganizationInvitation> OrganizationInvitations { get; }
     IQueryable<Supplier> Suppliers { get; }
     IQueryable<ImportBatch> ImportBatches { get; }
     IQueryable<ImportItem> ImportItems { get; }
@@ -251,11 +255,13 @@ public sealed class CreateProductHandler(
     IApplicationDbContext db,
     ICurrentRequest current,
     IObjectStorage storage,
+    IQuotaGuard quotas,
     TimeProvider time) : IRequestHandler<CreateProductCommand, ProductResponse>
 {
     public async Task<ProductResponse> Handle(CreateProductCommand request, CancellationToken cancellationToken)
     {
         var orgId = CatalogHandlerSupport.RequireOrganization(current);
+        await quotas.EnsureProductCapacityAsync(orgId, cancellationToken).ConfigureAwait(false);
         await CatalogHandlerSupport.EnsureSlugAvailable(db, request.Slug, null, cancellationToken).ConfigureAwait(false);
         await CatalogHandlerSupport.EnsureTaxonomyExists(db, request.TeamId, request.SeasonId, request.CategoryIds, request.TagIds, cancellationToken)
             .ConfigureAwait(false);

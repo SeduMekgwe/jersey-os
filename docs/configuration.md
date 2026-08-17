@@ -29,7 +29,11 @@ Configuration is loaded from `appsettings*.json`, environment variables, and an 
 | `ObjectStorage__AzureBlob__ContainerName` | Blob container name (created if missing) | No | When `Provider=AzureBlob` |
 | `ObjectStorage__AzureBlob__PublicBaseUrl` | Optional override for absolute blob/CDN/custom-domain base URL | No | When `Provider=AzureBlob` |
 | `Database__ConnectionString` | SQL Server connection | Yes | All |
-| `Database__DefaultOrganizationId` | Default org for single-tenant-ready mode | No | All |
+| `Database__DefaultOrganizationId` | Default org for single-tenant-ready mode and Shopify webhook fallback | No | All |
+| `Tenancy__DefaultMaxProducts` | Default product cap for new orgs (default 5000) | No | All |
+| `Tenancy__DefaultMaxMembers` | Default member cap for new orgs (default 25) | No | All |
+| `Tenancy__DefaultMaxImportBatchesPerDay` | Default daily import-batch cap (default 50) | No | All |
+| `Tenancy__DefaultMaxAiGenerationsPerDay` | Default daily AI-generation cap (default 200) | No | All |
 | `Jwt__SigningKey` | HMAC signing material (min 32 bytes) | Yes | All |
 | `Shopify__ShopDomain` | Shopify shop hostname (e.g. `demo.myshopify.com`) | No | Hosted when publishing |
 | `Shopify__AccessToken` | Admin API access token; empty selects null publisher | Yes | Hosted when publishing |

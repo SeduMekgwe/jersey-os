@@ -258,6 +258,6 @@ public sealed class PublishingIntegrationTests : IAsyncLifetime
     {
         public static FixedResolver Null { get; } = new(new NullSalesChannelPublisher());
 
-        public ISalesChannelPublisher? Resolve(string channelCode) => publisher;
+        public ISalesChannelPublisher? Resolve(string channelCode, Guid organizationId) => publisher;
     }
 }

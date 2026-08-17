@@ -61,6 +61,7 @@ public static class Permissions
     public const string AuditRead = "audit.read";
     public const string NotificationsRead = "notifications.read";
     public const string IntegrationsManage = "integrations.manage";
+    public const string OrgMembersManage = "org.members.manage";
     public static readonly string[] All =
     [
         PlatformRead,
@@ -80,8 +81,29 @@ public static class Permissions
         AiWrite,
         AuditRead,
         NotificationsRead,
-        IntegrationsManage
+        IntegrationsManage,
+        OrgMembersManage
     ];
+
+    public static readonly string[] MemberKeys =
+    [
+        PlatformRead,
+        SystemHealthRead,
+        CatalogRead,
+        CatalogWrite,
+        PricingRead,
+        InventoryAdjust,
+        ImportRead,
+        ImportUpload,
+        ImportReview,
+        PublishingRead,
+        AiRead,
+        AuditRead,
+        NotificationsRead
+    ];
+
+    public static IReadOnlyList<string> TenantAdminKeys =>
+        All.Where(key => key != PlatformAdmin).ToArray();
 }
 
 public sealed class JerseyOsDbContext(
@@ -131,8 +153,15 @@ public sealed class JerseyOsDbContext(
     public DbSet<NotificationMessage> NotificationMessagesSet => Set<NotificationMessage>();
     public DbSet<NotificationDelivery> NotificationDeliveriesSet => Set<NotificationDelivery>();
     public DbSet<ApiKeyCredential> ApiKeysSet => Set<ApiKeyCredential>();
+    public DbSet<OrganizationQuota> OrganizationQuotasSet => Set<OrganizationQuota>();
+    public DbSet<OrganizationSetting> OrganizationSettingsSet => Set<OrganizationSetting>();
+    public DbSet<OrganizationInvitation> OrganizationInvitationsSet => Set<OrganizationInvitation>();
 
     IQueryable<Organization> IApplicationDbContext.Organizations => OrganizationsSet;
+    IQueryable<OrganizationMembership> IApplicationDbContext.OrganizationMemberships => OrganizationMemberships;
+    IQueryable<OrganizationQuota> IApplicationDbContext.OrganizationQuotas => OrganizationQuotasSet;
+    IQueryable<OrganizationSetting> IApplicationDbContext.OrganizationSettings => OrganizationSettingsSet;
+    IQueryable<OrganizationInvitation> IApplicationDbContext.OrganizationInvitations => OrganizationInvitationsSet;
     IQueryable<RefreshTokenSession> IApplicationDbContext.RefreshTokenSessions => RefreshTokenSessionsSet;
     IQueryable<OutboxMessage> IApplicationDbContext.OutboxMessages => OutboxMessagesSet;
     IQueryable<Product> IApplicationDbContext.Products => ProductsSet;
@@ -247,6 +276,7 @@ public sealed class JerseyOsDbContext(
         builder.ConfigureAi(EffectiveOrganizationId);
         builder.ConfigureNotifications(EffectiveOrganizationId);
         builder.ConfigureIntegrations(EffectiveOrganizationId);
+        builder.ConfigureTenancy(EffectiveOrganizationId);
 
         foreach (var entityType in builder.Model.GetEntityTypes()
                      .Where(t => typeof(IAuditableEntity).IsAssignableFrom(t.ClrType)))
@@ -342,10 +372,12 @@ public sealed class IdentityService(
     JerseyOsDbContext db,
     UserManager<ApplicationUser> users,
     ICurrentRequest current,
+    IAuditRecorder audit,
     IOptions<JwtOptions> jwtOptions,
     TimeProvider timeProvider) : IIdentityService
 {
-    public async Task<IssuedAuth?> LoginAsync(string email, string password, CancellationToken cancellationToken)
+    public async Task<IssuedAuth?> LoginAsync(
+        string email, string password, Guid? organizationId, CancellationToken cancellationToken)
     {
         var normalized = users.NormalizeEmail(email);
         var user = await db.Users.IgnoreQueryFilters()
@@ -355,11 +387,112 @@ public sealed class IdentityService(
         {
             return null;
         }
-        var membership = await db.OrganizationMemberships.IgnoreQueryFilters()
-            .Where(x => x.UserId == user.Id && !x.IsDeleted)
+
+        var memberships = db.OrganizationMemberships.IgnoreQueryFilters()
+            .Where(x => x.UserId == user.Id && !x.IsDeleted);
+        if (organizationId is { } requestedOrg)
+        {
+            memberships = memberships.Where(x => x.OrganizationId == requestedOrg);
+        }
+
+        var membership = await memberships
             .OrderBy(x => x.CreatedAtUtc)
             .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
         return membership is null ? null : await IssueAsync(user, membership.OrganizationId, Guid.NewGuid(), cancellationToken);
+    }
+
+    public async Task<IssuedAuth?> SwitchOrganizationAsync(Guid organizationId, CancellationToken cancellationToken)
+    {
+        if (current.UserId is not { } userId)
+        {
+            return null;
+        }
+
+        var user = await db.Users.IgnoreQueryFilters()
+            .SingleOrDefaultAsync(x => x.Id == userId && x.IsActive, cancellationToken)
+            .ConfigureAwait(false);
+        if (user is null)
+        {
+            return null;
+        }
+
+        var membership = await db.OrganizationMemberships.IgnoreQueryFilters()
+            .SingleOrDefaultAsync(
+                x => x.UserId == userId && x.OrganizationId == organizationId && !x.IsDeleted,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (membership is null)
+        {
+            return null;
+        }
+
+        audit.Record(
+            organizationId,
+            AuditActions.OrganizationSwitched,
+            nameof(Organization),
+            organizationId.ToString("N"),
+            new { fromOrganizationId = current.OrganizationId, toOrganizationId = organizationId });
+        return await IssueAsync(user, organizationId, Guid.NewGuid(), cancellationToken);
+    }
+
+    public async Task<IReadOnlyCollection<OrganizationMembershipResponse>> ListMembershipsAsync(
+        CancellationToken cancellationToken)
+    {
+        if (current.UserId is not { } userId)
+        {
+            return [];
+        }
+
+        var memberships = await db.OrganizationMemberships.IgnoreQueryFilters().AsNoTracking()
+            .Where(x => x.UserId == userId && !x.IsDeleted)
+            .OrderBy(x => x.CreatedAtUtc)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (memberships.Count == 0)
+        {
+            return [];
+        }
+
+        var orgIds = memberships.Select(x => x.OrganizationId).ToArray();
+        var membershipIds = memberships.Select(x => x.Id).ToArray();
+        var orgs = await db.OrganizationsSet.IgnoreQueryFilters().AsNoTracking()
+            .Where(x => orgIds.Contains(x.Id) && !x.IsDeleted)
+            .ToDictionaryAsync(x => x.Id, cancellationToken)
+            .ConfigureAwait(false);
+        var roles = await (
+                from membershipRole in db.MembershipRoles.IgnoreQueryFilters().AsNoTracking()
+                join role in db.Roles.IgnoreQueryFilters().AsNoTracking() on membershipRole.RoleId equals role.Id
+                where membershipIds.Contains(membershipRole.MembershipId)
+                select new { membershipRole.MembershipId, role.Name })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var roleByMembership = roles
+            .GroupBy(x => x.MembershipId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(x => x.Name).FirstOrDefault(n => n == OrganizationRoles.Admin) ?? g.First().Name ?? OrganizationRoles.Member);
+
+        return memberships
+            .Where(m => orgs.ContainsKey(m.OrganizationId))
+            .Select(m =>
+            {
+                var org = orgs[m.OrganizationId];
+                return new OrganizationMembershipResponse(
+                    org.Id,
+                    org.Name,
+                    org.Slug,
+                    roleByMembership.GetValueOrDefault(m.Id, OrganizationRoles.Member));
+            })
+            .ToArray();
+    }
+
+    internal async Task<IssuedAuth?> IssueForUserAsync(
+        Guid userId, Guid organizationId, CancellationToken cancellationToken)
+    {
+        var user = await db.Users.IgnoreQueryFilters()
+            .SingleOrDefaultAsync(x => x.Id == userId && x.IsActive, cancellationToken)
+            .ConfigureAwait(false);
+        return user is null ? null : await IssueAsync(user, organizationId, Guid.NewGuid(), cancellationToken);
     }
 
     public async Task<IssuedAuth?> RefreshAsync(string refreshToken, CancellationToken cancellationToken)
@@ -408,7 +541,9 @@ public sealed class IdentityService(
         var user = await db.Users.AsNoTracking().SingleOrDefaultAsync(x => x.Id == userId, cancellationToken);
         if (user is null) return null;
         var permissions = await PermissionKeysAsync(userId, organizationId, cancellationToken);
-        return new UserResponse(user.Id, DisplayNameFor(user), user.Email ?? string.Empty, organizationId, permissions);
+        var organizationName = await OrganizationNameAsync(organizationId, cancellationToken).ConfigureAwait(false);
+        return new UserResponse(
+            user.Id, DisplayNameFor(user), user.Email ?? string.Empty, organizationId, organizationName, permissions);
     }
 
     private async Task<IssuedAuth> IssueAsync(
@@ -438,7 +573,9 @@ public sealed class IdentityService(
             ExpiresAtUtc = now.AddDays(options.RefreshDays)
         });
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        var dto = new UserResponse(user.Id, DisplayNameFor(user), user.Email ?? string.Empty, organizationId, permissionKeys);
+        var organizationName = await OrganizationNameAsync(organizationId, cancellationToken).ConfigureAwait(false);
+        var dto = new UserResponse(
+            user.Id, DisplayNameFor(user), user.Email ?? string.Empty, organizationId, organizationName, permissionKeys);
         return new IssuedAuth(
             new AuthResponse(new JwtSecurityTokenHandler().WriteToken(token), expires, dto),
             refreshToken, now.AddDays(options.RefreshDays));
@@ -446,6 +583,13 @@ public sealed class IdentityService(
 
     private static string DisplayNameFor(ApplicationUser user) =>
         string.IsNullOrWhiteSpace(user.UserName) ? (user.Email ?? user.Id.ToString()) : user.UserName;
+
+    private async Task<string> OrganizationNameAsync(Guid organizationId, CancellationToken cancellationToken) =>
+        await db.OrganizationsSet.IgnoreQueryFilters().AsNoTracking()
+            .Where(x => x.Id == organizationId)
+            .Select(x => x.Name)
+            .SingleOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false) ?? string.Empty;
 
     private async Task<string[]> PermissionKeysAsync(Guid userId, Guid organizationId, CancellationToken cancellationToken) =>
         await (from membership in db.OrganizationMemberships.IgnoreQueryFilters()
@@ -593,6 +737,11 @@ public static class DependencyInjection
     {
         services.Configure<DatabaseOptions>(configuration.GetSection(DatabaseOptions.Section));
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.Section));
+        services.Configure<TenancyOptions>(configuration.GetSection(TenancyOptions.Section));
+        services.AddScoped<IQuotaGuard, QuotaGuard>();
+        services.AddScoped<IOrganizationProvisioner, OrganizationProvisioner>();
+        services.AddScoped<IOrganizationIntegrationSettings, OrganizationIntegrationSettingsStore>();
+        services.AddScoped<IInvitationAcceptor, InvitationAcceptor>();
         var connectionString = configuration[$"{DatabaseOptions.Section}:ConnectionString"]
             ?? throw new InvalidOperationException("Database connection string is required.");
         var redisConnection = configuration["Redis:ConnectionString"] ?? "localhost:6379,abortConnect=false";
@@ -611,7 +760,8 @@ public static class DependencyInjection
             o.Password.RequireNonAlphanumeric = true;
             o.User.RequireUniqueEmail = true;
         }).AddRoles<ApplicationRole>().AddEntityFrameworkStores<JerseyOsDbContext>();
-        services.AddScoped<IIdentityService, IdentityService>();
+        services.AddScoped<IdentityService>();
+        services.AddScoped<IIdentityService>(sp => sp.GetRequiredService<IdentityService>());
         services.AddSingleton<IExternalIdentityProvider, UnsupportedExternalIdentityProvider>();
         services.AddSingleton<IPasswordlessIdentityProvider, UnsupportedPasswordlessIdentityProvider>();
         services.AddScoped<OutboxDispatcher>();
@@ -695,7 +845,8 @@ public static class DependencyInjection
                 .AddPolicy(Permissions.AiWrite, p => p.RequireClaim("permission", Permissions.AiWrite))
                 .AddPolicy(Permissions.AuditRead, p => p.RequireClaim("permission", Permissions.AuditRead))
                 .AddPolicy(Permissions.NotificationsRead, p => p.RequireClaim("permission", Permissions.NotificationsRead))
-                .AddPolicy(Permissions.IntegrationsManage, p => p.RequireClaim("permission", Permissions.IntegrationsManage));
+                .AddPolicy(Permissions.IntegrationsManage, p => p.RequireClaim("permission", Permissions.IntegrationsManage))
+                .AddPolicy(Permissions.OrgMembersManage, p => p.RequireClaim("permission", Permissions.OrgMembersManage));
         }
         return services;
     }

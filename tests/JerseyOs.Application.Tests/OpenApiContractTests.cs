@@ -20,6 +20,9 @@ public sealed class OpenApiContractTests
         Assert.Contains("/ai/generations:", document, StringComparison.Ordinal);
         Assert.Contains("/audit/events:", document, StringComparison.Ordinal);
         Assert.Contains("/integrations/api-keys:", document, StringComparison.Ordinal);
+        Assert.Contains("/admin/organizations:", document, StringComparison.Ordinal);
+        Assert.Contains("/org/invitations:", document, StringComparison.Ordinal);
+        Assert.Contains("/auth/switch-organization:", document, StringComparison.Ordinal);
         Assert.Contains("operationId: listAuditEvents", document, StringComparison.Ordinal);
         Assert.Contains("operationId: listNotificationMessages", document, StringComparison.Ordinal);
         Assert.Contains("operationId: listApiKeys", document, StringComparison.Ordinal);

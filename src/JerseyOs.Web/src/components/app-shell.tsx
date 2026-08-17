@@ -1,7 +1,9 @@
 ﻿import * as Dialog from '@radix-ui/react-dialog';
+import { useQuery } from '@tanstack/react-query';
 import {
   Activity,
   Bell,
+  Building2,
   CircleDollarSign,
   FolderKanban,
   KeyRound,
@@ -14,6 +16,7 @@ import {
   ShieldCheck,
   Tags,
   Upload,
+  Users,
   X,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -21,7 +24,9 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '@/auth/auth-context';
 import { Button } from '@/components/ui';
 import { OpsStatusListener } from '@/lib/ops-status';
+import { apiRequest } from '@/lib/api';
 import { cn } from '@/lib/cn';
+import type { OrganizationMembershipDto } from '@/types/api';
 
 const nav = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -33,7 +38,9 @@ const nav = [
   { to: '/publishing', label: 'Publishing', icon: Radio, end: false },
   { to: '/audit', label: 'Audit', icon: ScrollText, end: false },
   { to: '/notifications', label: 'Notifications', icon: Bell, end: false },
+  { to: '/members', label: 'Members', icon: Users, end: false },
   { to: '/integrations', label: 'API keys', icon: KeyRound, end: false },
+  { to: '/admin/organizations', label: 'Organizations', icon: Building2, end: false },
   { to: '/system-health', label: 'System health', icon: Activity, end: false },
 ];
 function Navigation({ onNavigate }: { onNavigate?: () => void }) {
@@ -76,6 +83,35 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
+function OrganizationSwitcher() {
+  const { user, switchOrganization } = useAuth();
+  const orgsQuery = useQuery({
+    queryKey: ['auth', 'organizations'],
+    queryFn: () => apiRequest<OrganizationMembershipDto[]>('/auth/organizations'),
+  });
+  const orgs = orgsQuery.data ?? [];
+  if (orgs.length < 2) {
+    return <p className="text-xs text-muted-foreground">{user?.organizationName}</p>;
+  }
+
+  return (
+    <label className="block text-xs text-muted-foreground">
+      <span className="sr-only">Organization</span>
+      <select
+        className="max-w-48 rounded-md border border-input bg-background px-2 py-1 text-xs"
+        value={user?.organizationId}
+        onChange={(event) => void switchOrganization(event.target.value)}
+      >
+        {orgs.map((org) => (
+          <option key={org.organizationId} value={org.organizationId}>
+            {org.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 export function AppShell() {
   const [open, setOpen] = useState(false);
   const { user } = useAuth();
@@ -103,7 +139,7 @@ export function AppShell() {
             <span className="font-semibold">Catalog & import</span>
             <div className="text-right">
               <p className="text-sm font-medium">{user?.displayName}</p>
-              <p className="text-xs text-muted-foreground">{user?.email}</p>
+              <OrganizationSwitcher />
             </div>
           </div>
         </header>
